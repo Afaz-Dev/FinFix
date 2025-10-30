@@ -1,7 +1,7 @@
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton,
     QListWidget, QHBoxLayout, QGraphicsDropShadowEffect, QMessageBox,
-    QComboBox, QPlainTextEdit, QFileDialog, QDialog
+    QComboBox, QPlainTextEdit, QFileDialog, QDialog, QFrame
 )
 from PyQt5.QtGui import QColor, QFont, QDoubleValidator
 from PyQt5.QtCore import Qt
@@ -42,6 +42,14 @@ QPushButton#themeButton { background-color: #323232; border: 1px solid #4A4A4A; 
 QPushButton#themeButton:hover { background-color: #3C3C3C; }
 QPlainTextEdit { background-color: #1E1E1E; border: 1px solid #333333; border-radius: 8px; padding: 6px; color: #E0E0E0; }
 QComboBox { background-color: #1E1E1E; border: 2px solid #333333; border-radius: 8px; padding: 6px; color: #E0E0E0; }
+QFrame#HeaderBar { background-color: #1D1D28; border-radius: 18px; }
+QLabel#Title { font-size: 20px; font-weight: 600; background-color: transparent; }
+QLabel#Subtitle { color: #B0BEC5; font-size: 11px; background-color: transparent; }
+QLabel#BalanceValue { background-color: #1E3A29; border-radius: 14px; padding: 8px 14px; font-size: 15px; font-weight: 600; color: #A5D6A7; }
+QFrame#Card { background-color: #1A1A1F; border: 1px solid #2C2C34; border-radius: 16px; }
+QLabel#SectionTitle { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: #9FA8DA; background-color: transparent; }
+QPushButton#SecondaryButton { background-color: #2A2A33; border: 1px solid #3A3A45; border-radius: 10px; padding: 9px 12px; font-weight: 600; color: #F5F5F5; }
+QPushButton#SecondaryButton:hover { background-color: #353543; }
 """.strip()
 
 LIGHT_STYLESHEET = """
@@ -52,6 +60,14 @@ QPushButton#themeButton { background-color: #E0E0E0; border: 1px solid #BDBDBD; 
 QPushButton#themeButton:hover { background-color: #D5D5D5; }
 QPlainTextEdit { background-color: #FFFFFF; border: 1px solid #D0D0D0; border-radius: 8px; padding: 6px; color: #212121; }
 QComboBox { background-color: #FFFFFF; border: 2px solid #D0D0D0; border-radius: 8px; padding: 6px; color: #212121; }
+QFrame#HeaderBar { background-color: #FFFFFF; border-radius: 18px; border: 1px solid #E0E0E0; }
+QLabel#Title { font-size: 20px; font-weight: 600; color: #1B5E20; background-color: transparent; }
+QLabel#Subtitle { color: #5F6368; font-size: 11px; background-color: transparent; }
+QLabel#BalanceValue { background-color: #E8F5E9; border-radius: 14px; padding: 8px 14px; font-size: 15px; font-weight: 600; color: #2E7D32; }
+QFrame#Card { background-color: #FFFFFF; border: 1px solid #E0E0E0; border-radius: 16px; }
+QLabel#SectionTitle { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: #3949AB; background-color: transparent; }
+QPushButton#SecondaryButton { background-color: #F0F0F0; border: 1px solid #D0D0D0; border-radius: 10px; padding: 9px 12px; font-weight: 600; color: #1F1F1F; }
+QPushButton#SecondaryButton:hover { background-color: #E4E4E4; }
 """.strip()
 
 def money(x) -> Decimal:
@@ -217,35 +233,67 @@ class BudgetTracker(QWidget):
         ensure_storage()
 
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(16)
 
-        title = QLabel("Student Budget Tracker")
-        title.setFont(QFont("Segoe UI", 16, QFont.Bold))
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(title)
+        header = QFrame()
+        header.setObjectName("HeaderBar")
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(24, 18, 24, 18)
+        header_layout.setSpacing(24)
 
+        title_container = QVBoxLayout()
+        title_container.setSpacing(4)
+        title_label = QLabel("Student Budget Tracker")
+        title_label.setObjectName("Title")
+        subtitle = QLabel("Track spending, budgets, and savings with a clear monthly view.")
+        subtitle.setObjectName("Subtitle")
+        title_container.addWidget(title_label)
+        title_container.addWidget(subtitle)
+
+        header_layout.addLayout(title_container)
+        header_layout.addStretch(1)
+
+        header_actions = QVBoxLayout()
+        header_actions.setSpacing(8)
+        header_actions.setAlignment(Qt.AlignmentFlag.AlignRight)
+
+        self.balance_label = QLabel("Net Position: RM 0.00")
+        self.balance_label.setObjectName("BalanceValue")
+        self.balance_label.setAlignment(Qt.AlignmentFlag.AlignRight)
         self.theme_btn = QPushButton("Switch to Light Mode")
         self.theme_btn.setObjectName("themeButton")
         self.theme_btn.clicked.connect(self.toggle_theme)
-        layout.addWidget(self.theme_btn)
 
-        self.balance_label = QLabel("Balance: RM 0.00")
-        self.balance_label.setFont(QFont("Segoe UI", 12, QFont.Bold))
-        self.balance_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self.balance_label)
+        header_actions.addWidget(self.balance_label)
+        header_actions.addWidget(self.theme_btn, alignment=Qt.AlignmentFlag.AlignRight)
 
-        layout.addSpacing(8)
+        header_layout.addLayout(header_actions)
+        layout.addWidget(header)
+
+        content_layout = QHBoxLayout()
+        content_layout.setSpacing(16)
+
+        left_column = QVBoxLayout()
+        left_column.setSpacing(16)
+
+        form_card = QFrame()
+        form_card.setObjectName("Card")
+        form_layout = QVBoxLayout(form_card)
+        form_layout.setContentsMargins(20, 20, 20, 20)
+        form_layout.setSpacing(12)
         tx_header = QLabel("Log Transaction")
-        tx_header.setFont(QFont("Segoe UI", 12, QFont.Bold))
-        layout.addWidget(tx_header)
+        tx_header.setObjectName("SectionTitle")
+        form_layout.addWidget(tx_header)
 
         self.amount_input = QLineEdit()
         self.amount_input.setPlaceholderText("Enter amount (e.g., 50.00)")
         self.amount_input.setValidator(QDoubleValidator(0.01, 1_000_000.0, 2))
-        layout.addWidget(self.amount_input)
+        form_layout.addWidget(self.amount_input)
 
         self.desc_input = QLineEdit()
         self.desc_input.setPlaceholderText("Description (e.g., Lunch, Books)")
-        layout.addWidget(self.desc_input)
+        form_layout.addWidget(self.desc_input)
 
         self.category_input = QComboBox()
         self.category_input.setEditable(True)
@@ -255,29 +303,27 @@ class BudgetTracker(QWidget):
         line_edit = self.category_input.lineEdit()
         if line_edit is not None:
             line_edit.setPlaceholderText("Category (e.g., Food, Books, Savings)")
-        layout.addWidget(self.category_input)
+        form_layout.addWidget(self.category_input)
 
         btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(10)
         self.income_btn = self.createGradientButton("Add Income", "#4CAF50", "#2E7D32")
         self.expense_btn = self.createGradientButton("Add Expense", "#E91E63", "#880E4F")
         self.savings_btn = self.createGradientButton("Log Savings", "#03A9F4", "#01579B")
         btn_layout.addWidget(self.income_btn)
         btn_layout.addWidget(self.expense_btn)
         btn_layout.addWidget(self.savings_btn)
-        layout.addLayout(btn_layout)
+        form_layout.addLayout(btn_layout)
+        left_column.addWidget(form_card)
 
-        layout.addSpacing(8)
-        ledger_header = QLabel("Transactions")
-        ledger_header.setFont(QFont("Segoe UI", 12, QFont.Bold))
-        layout.addWidget(ledger_header)
-
-        self.transaction_list = QListWidget()
-        layout.addWidget(self.transaction_list)
-
-        layout.addSpacing(8)
+        budget_card = QFrame()
+        budget_card.setObjectName("Card")
+        budget_layout = QVBoxLayout(budget_card)
+        budget_layout.setContentsMargins(20, 20, 20, 20)
+        budget_layout.setSpacing(12)
         budget_header = QLabel("Monthly Budgets")
-        budget_header.setFont(QFont("Segoe UI", 12, QFont.Bold))
-        layout.addWidget(budget_header)
+        budget_header.setObjectName("SectionTitle")
+        budget_layout.addWidget(budget_header)
 
         self.budget_category_input = QLineEdit()
         self.budget_category_input.setPlaceholderText("Category name (e.g., Food)")
@@ -285,32 +331,84 @@ class BudgetTracker(QWidget):
         self.budget_amount_input.setPlaceholderText("Monthly budget (RM)")
         self.budget_amount_input.setValidator(QDoubleValidator(0.00, 1_000_000.0, 2))
         budget_form = QHBoxLayout()
+        budget_form.setSpacing(10)
         budget_form.addWidget(self.budget_category_input)
         budget_form.addWidget(self.budget_amount_input)
         self.add_budget_btn = QPushButton("Save Budget")
+        self.add_budget_btn.setObjectName("SecondaryButton")
         budget_form.addWidget(self.add_budget_btn)
-        layout.addLayout(budget_form)
+        budget_layout.addLayout(budget_form)
 
         self.budget_list = QListWidget()
-        layout.addWidget(self.budget_list)
+        self.budget_list.setMinimumHeight(120)
+        budget_layout.addWidget(self.budget_list)
+        left_column.addWidget(budget_card)
 
-        layout.addSpacing(8)
+        left_column.addStretch(1)
+
+        right_column = QVBoxLayout()
+        right_column.setSpacing(16)
+
+        ledger_card = QFrame()
+        ledger_card.setObjectName("Card")
+        ledger_layout = QVBoxLayout(ledger_card)
+        ledger_layout.setContentsMargins(20, 20, 20, 20)
+        ledger_layout.setSpacing(12)
+        ledger_header = QLabel("Transactions")
+        ledger_header.setObjectName("SectionTitle")
+        ledger_layout.addWidget(ledger_header)
+
+        self.transaction_list = QListWidget()
+        self.transaction_list.setMinimumHeight(220)
+        ledger_layout.addWidget(self.transaction_list)
+
+        reclass_row = QHBoxLayout()
+        reclass_row.setSpacing(10)
+        self.reclass_type_combo = QComboBox()
+        self.reclass_type_combo.addItems(["income", "expense", "savings"])
+        self.reclass_category_input = QLineEdit()
+        self.reclass_category_input.setPlaceholderText("New category (optional)")
+        self.convert_btn = QPushButton("Reclassify Selected Transaction")
+        self.convert_btn.setObjectName("SecondaryButton")
+        reclass_row.addWidget(self.reclass_type_combo)
+        reclass_row.addWidget(self.reclass_category_input)
+        reclass_row.addWidget(self.convert_btn)
+        ledger_layout.addLayout(reclass_row)
+        right_column.addWidget(ledger_card)
+
+        summary_card = QFrame()
+        summary_card.setObjectName("Card")
+        summary_layout = QVBoxLayout(summary_card)
+        summary_layout.setContentsMargins(20, 20, 20, 20)
+        summary_layout.setSpacing(12)
         summary_header = QLabel("Monthly Summary")
-        summary_header.setFont(QFont("Segoe UI", 12, QFont.Bold))
-        layout.addWidget(summary_header)
+        summary_header.setObjectName("SectionTitle")
+        summary_layout.addWidget(summary_header)
 
         self.summary_display = QPlainTextEdit()
         self.summary_display.setReadOnly(True)
-        self.summary_display.setMinimumHeight(150)
+        self.summary_display.setMinimumHeight(180)
         self.summary_display.setPlaceholderText("Summaries will appear here once you start logging transactions.")
-        layout.addWidget(self.summary_display)
+        summary_layout.addWidget(self.summary_display)
 
-        export_layout = QHBoxLayout()
+        actions_row = QHBoxLayout()
+        actions_row.setSpacing(10)
         self.export_btn = QPushButton("Export Monthly CSV")
         self.chart_btn = QPushButton("Show Savings Chart")
-        export_layout.addWidget(self.export_btn)
-        export_layout.addWidget(self.chart_btn)
-        layout.addLayout(export_layout)
+        self.export_btn.setObjectName("SecondaryButton")
+        self.chart_btn.setObjectName("SecondaryButton")
+        actions_row.addWidget(self.export_btn)
+        actions_row.addWidget(self.chart_btn)
+        summary_layout.addLayout(actions_row)
+        right_column.addWidget(summary_card)
+
+        right_column.addStretch(1)
+
+        content_layout.addLayout(left_column, 1)
+        content_layout.addLayout(right_column, 1)
+        content_layout.setStretch(0, 1)
+        content_layout.setStretch(1, 1)
+        layout.addLayout(content_layout)
 
         # Connect actions
         self.income_btn.clicked.connect(lambda: self.add_tx("income"))
@@ -319,6 +417,7 @@ class BudgetTracker(QWidget):
         self.add_budget_btn.clicked.connect(self.add_budget)
         self.export_btn.clicked.connect(self.export_monthly_data)
         self.chart_btn.clicked.connect(self.show_savings_visual)
+        self.convert_btn.clicked.connect(self.reclassify_selected_transaction)
 
         self.apply_theme()
         self.load_ledger()
@@ -564,6 +663,109 @@ class BudgetTracker(QWidget):
             if tx_date.year == today.year and tx_date.month == today.month:
                 total += tx["amount"]
         return total
+
+    def reclassify_selected_transaction(self):
+        row = self.transaction_list.currentRow()
+        if row < 0 or row >= len(self.transactions):
+            QMessageBox.information(self, "Select a transaction", "Choose a transaction to reclassify.")
+            return
+
+        tx = self.transactions[row]
+        if not tx["tx_id"]:
+            QMessageBox.warning(
+                self,
+                "Cannot convert",
+                "This transaction does not have an ID and cannot be converted in-place.",
+            )
+            return
+
+        new_type = (self.reclass_type_combo.currentText() or "").strip().lower()
+        if new_type not in {"income", "expense", "savings"}:
+            QMessageBox.warning(self, "Choose a type", "Select a new transaction type from the dropdown.")
+            return
+
+        if new_type == "savings":
+            default_category = tx["category"] if tx["category"] and tx["category"] != "General" else "Savings"
+        elif new_type == "income":
+            default_category = tx["category"] if tx["category"] and tx["category"] not in {"General", "Savings"} else "Income"
+        else:
+            default_category = tx["category"] or "General"
+
+        category_input = self.reclass_category_input.text().strip()
+        category = category_input or default_category
+
+        if new_type == tx["type"] and category == tx["category"]:
+            QMessageBox.information(self, "No changes", "This transaction already matches the requested type and category.")
+            return
+
+        confirm = QMessageBox.question(
+            self,
+            "Confirm reclassification",
+            (
+                f"Convert transaction {tx['tx_id']}?\n"
+                f"Amount: RM {tx['amount']:.2f}\n"
+                f"Original type: {tx['type']}\n"
+                f"Original category: {tx['category']}\n"
+                f"New type: {new_type}\n"
+                f"New category: {category}"
+            ),
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+
+        if not self.update_transaction_record(tx["tx_id"], new_type, category):
+            QMessageBox.critical(self, "Update failed", "Could not update the transaction in the ledger file.")
+            return
+
+        self.load_ledger()
+        self.load_budgets()
+        self.refresh_category_options()
+        self.update_balance()
+        self.update_summary()
+        if 0 <= row < self.transaction_list.count():
+            self.transaction_list.setCurrentRow(row)
+        self.reclass_category_input.clear()
+        QMessageBox.information(self, "Updated", "Transaction has been updated.")
+
+    def update_transaction_record(self, tx_id: str, new_type: str, new_category: str) -> bool:
+        if not tx_id:
+            return False
+        try:
+            with LEDGER_CSV.open(newline="", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                rows = list(reader)
+                header = reader.fieldnames or []
+        except FileNotFoundError:
+            return False
+
+        updated = False
+        for row in rows:
+            if row.get("tx_id") == tx_id:
+                row["type"] = new_type
+                row["category"] = new_category
+                updated = True
+                break
+        if not updated:
+            return False
+
+        ensure_writable(LEDGER_CSV)
+        fieldnames = []
+        for key in header:
+            if key and key not in fieldnames:
+                fieldnames.append(key)
+        for key in LEDGER_HEADER:
+            if key not in fieldnames:
+                fieldnames.append(key)
+
+        with LEDGER_CSV.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            for row in rows:
+                writer.writerow({field: row.get(field, "") for field in fieldnames})
+        ensure_private_file(LEDGER_CSV)
+        return True
 
     def export_monthly_data(self):
         monthly = self.current_month_transactions()
