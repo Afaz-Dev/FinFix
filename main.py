@@ -60,6 +60,7 @@ FALLBACK_NAMES = {
     "JPY": "Japanese Yen",
     "CNY": "Chinese Yuan",
     "THB": "Thai Baht",
+    "IDR": "Indonesian Rupiah",
 }
 
 DARK_STYLESHEET = """
