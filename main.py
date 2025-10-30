@@ -61,6 +61,12 @@ FALLBACK_NAMES = {
     "CNY": "Chinese Yuan",
     "THB": "Thai Baht",
     "IDR": "Indonesian Rupiah",
+    "CAD": "Canadian Dollar",
+    "CHF": "Swiss Franc",
+    "NZD": "New Zealand Dollar",
+    "HKD": "Hong Kong Dollar",
+    "KRW": "South Korean Won",
+    "INR": "Indian Rupee",
 }
 
 DARK_STYLESHEET = """
