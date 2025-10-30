@@ -4,7 +4,7 @@ from PyQt5.QtWidgets import (
     QComboBox, QPlainTextEdit, QFileDialog, QDialog, QFrame, QSplitter, QDialogButtonBox
 )
 from PyQt5.QtGui import QColor, QFont, QDoubleValidator
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QEvent
 from decimal import Decimal, ROUND_HALF_UP
 from collections import defaultdict
 from datetime import date
@@ -36,12 +36,12 @@ LEDGER_HEADER = ["tx_id", "date", "type", "category", "amount_rm", "desc"]
 OLD_LEDGER_HEADER = ["tx_id", "type", "amount_rm", "desc"]
 BUDGET_HEADER = ["category", "monthly_budget_rm"]
 CURRENCY_JSON = DATA_DIR / "rates.json"
-RATES_TTL_SECONDS = 12 * 60 * 60  # reuse rates for half a day to limit network calls
+RATES_TTL_SECONDS = 12 * 60 * 60             # reuse rates for half a day to limit network calls
 RATES_API_URL = "https://open.er-api.com/v6/latest"
-DEFAULT_TARGET_CURRENCIES = ["USD", "EUR", "GBP", "SGD", "AUD", "JPY", "CNY", "THB"]
+DEFAULT_TARGET_CURRENCIES = ["USD", "EUR", "GBP", "SGD", "AUD", "JPY", "CNY", "THB", "IDR", "TWD", "HKD", "VND"]
 FALLBACK_RATES = {
     "MYR": 1.0,
-    "USD": 0.21,
+    "USD": 0.24,
     "EUR": 0.19,
     "GBP": 0.16,
     "SGD": 0.28,
@@ -49,6 +49,10 @@ FALLBACK_RATES = {
     "JPY": 32.0,
     "CNY": 1.52,
     "THB": 7.4,
+    "IDR": 3600.0,
+    "TWD": 7.3,
+    "HKD": 1.88,
+    "VND": 5700.0,
 }
 FALLBACK_NAMES = {
     "MYR": "Malaysian Ringgit",
@@ -67,6 +71,8 @@ FALLBACK_NAMES = {
     "HKD": "Hong Kong Dollar",
     "KRW": "South Korean Won",
     "INR": "Indian Rupee",
+    "TWD": "New Taiwan Dollar",
+    "VND": "Vietnamese Dong",
 }
 
 DARK_STYLESHEET = """
@@ -290,6 +296,27 @@ def next_tx_id() -> str:
         return "TX001"
     last = rows[-1]["tx_id"][2:]  # after 'TX'
     return f"TX{int(last)+1:03d}"
+
+WINDOW_CONTEXT_HELP_HINT = getattr(Qt, "WindowContextHelpButtonHint", None)
+CONTEXT_HELP_EVENT_TYPE = getattr(QEvent, "ContextHelp", None)
+
+
+class HelpAwareDialog(QDialog):
+    """QDialog that shows a help message when the title bar help button is pressed."""
+
+    def __init__(self, parent=None, help_title: str = "Help", help_text: str = ""):
+        super().__init__(parent)
+        self._help_title = help_title or "Help"
+        self._help_text = help_text.strip() or "No additional information is available."
+        if WINDOW_CONTEXT_HELP_HINT is not None:
+            self.setWindowFlag(WINDOW_CONTEXT_HELP_HINT, True)
+
+    def event(self, event):
+        if CONTEXT_HELP_EVENT_TYPE is not None and event.type() == CONTEXT_HELP_EVENT_TYPE:
+            QMessageBox.information(self, self._help_title, self._help_text)
+            return True
+        return super().event(event)
+
 
 class BudgetTracker(QWidget):
     def __init__(self):
@@ -1332,7 +1359,15 @@ class BudgetTracker(QWidget):
         ax.set_title(f"Monthly Expenses ({date.today().strftime('%B %Y')})")
         fig.tight_layout()
 
-        dialog = QDialog(self)
+        dialog = HelpAwareDialog(
+            self,
+            help_title="Pie Chart Help",
+            help_text=(
+                "This chart shows the expense distribution for the current month. "
+                "Amounts are based on all non-income transactions you have recorded. "
+                "Use the legend on the right to view category totals."
+            ),
+        )
         dialog.setWindowTitle("Monthly Expenses Pie Chart")
         dialog.resize(640, 420)
         layout = QVBoxLayout(dialog)
