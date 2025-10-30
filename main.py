@@ -1316,7 +1316,14 @@ class BudgetTracker(QWidget):
             )
         fig.tight_layout()
 
-        dialog = QDialog(self)
+        dialog = HelpAwareDialog(
+            self,
+            help_title="Savings Chart Help",
+            help_text=(
+                "This bar chart shows the total amount saved per category for the current month. "
+                "Each bar sums all savings transactions recorded under that category."
+            ),
+        )
         dialog.setWindowTitle("Monthly Savings Visualization")
         dialog.resize(640, 420)
         layout = QVBoxLayout(dialog)
