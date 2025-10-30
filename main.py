@@ -88,6 +88,8 @@ QLabel#Title { font-size: 20px; font-weight: 600; background-color: transparent;
 QLabel#Subtitle { color: #B0BEC5; font-size: 11px; background-color: transparent; }
 QLabel#BalanceValue { background-color: #1E3A29; border-radius: 14px; padding: 8px 14px; font-size: 15px; font-weight: 600; color: #A5D6A7; }
 QFrame#Card { background-color: #1A1A1F; border: 1px solid #2C2C34; border-radius: 16px; }
+QFrame#SummaryBubble { background-color: #1C1C21; border: 1px solid #2C2C34; border-radius: 14px; }
+QLabel#SummaryText { color: #E0E0E0; font-size: 12px; background-color: transparent; }
 QLabel#SectionTitle { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: #9FA8DA; background-color: transparent; }
 QPushButton#SecondaryButton { background-color: #2A2A33; border: 1px solid #3A3A45; border-radius: 10px; padding: 9px 12px; font-weight: 600; color: #F5F5F5; }
 QPushButton#SecondaryButton:hover { background-color: #353543; }
@@ -107,6 +109,8 @@ QLabel#Title { font-size: 20px; font-weight: 600; color: #1B5E20; background-col
 QLabel#Subtitle { color: #5F6368; font-size: 11px; background-color: transparent; }
 QLabel#BalanceValue { background-color: #E8F5E9; border-radius: 14px; padding: 8px 14px; font-size: 15px; font-weight: 600; color: #2E7D32; }
 QFrame#Card { background-color: #FFFFFF; border: 1px solid #E0E0E0; border-radius: 16px; }
+QFrame#SummaryBubble { background-color: #F9F9F9; border: 1px solid #D6D6D6; border-radius: 14px; }
+QLabel#SummaryText { color: #212121; font-size: 12px; background-color: transparent; }
 QLabel#SectionTitle { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: #3949AB; background-color: transparent; }
 QPushButton#SecondaryButton { background-color: #F0F0F0; border: 1px solid #D0D0D0; border-radius: 10px; padding: 9px 12px; font-weight: 600; color: #1F1F1F; }
 QPushButton#SecondaryButton:hover { background-color: #E4E4E4; }
@@ -561,11 +565,25 @@ class BudgetTracker(QWidget):
         summary_header.setObjectName("SectionTitle")
         summary_layout.addWidget(summary_header)
 
-        self.summary_display = QPlainTextEdit()
-        self.summary_display.setReadOnly(True)
-        self.summary_display.setMinimumHeight(180)
-        self.summary_display.setPlaceholderText("Summaries will appear here once you start logging transactions.")
-        summary_layout.addWidget(self.summary_display)
+        self.summary_frame = QFrame()
+        self.summary_frame.setObjectName("SummaryBubble")
+        summary_inner = QVBoxLayout(self.summary_frame)
+        summary_inner.setContentsMargins(18, 16, 18, 16)
+        summary_inner.setSpacing(10)
+
+        self.summary_overview_label = QLabel("No transactions recorded yet.")
+        self.summary_overview_label.setObjectName("SummaryText")
+        self.summary_overview_label.setWordWrap(True)
+        self.summary_overview_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+
+        self.summary_category_label = QLabel("Category breakdown will appear once you log spending.")
+        self.summary_category_label.setObjectName("SummaryText")
+        self.summary_category_label.setWordWrap(True)
+        self.summary_category_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+
+        summary_inner.addWidget(self.summary_overview_label)
+        summary_inner.addWidget(self.summary_category_label)
+        summary_layout.addWidget(self.summary_frame)
 
         actions_row = QHBoxLayout()
         actions_row.setSpacing(10)
@@ -985,8 +1003,11 @@ class BudgetTracker(QWidget):
         return True
 
     def update_summary(self):
+        if not hasattr(self, "summary_overview_label"):
+            return
         if not self.transactions:
-            self.summary_display.setPlainText("No transactions recorded yet.")
+            self.summary_overview_label.setText("No transactions recorded yet.")
+            self.summary_category_label.setText("Category breakdown will appear once you log spending.")
             return
 
         today = date.today()
@@ -1011,38 +1032,38 @@ class BudgetTracker(QWidget):
                     category_totals[tx["category"]] += amount
 
         if not any(totals.values()) and not category_totals:
-            self.summary_display.setPlainText("No transactions recorded yet for this month.")
+            self.summary_overview_label.setText("No transactions recorded yet for this month.")
+            self.summary_category_label.setText("Category breakdown will appear once you log spending.")
             return
 
         net = totals["income"] - totals["expense"] - totals["savings"]
-        lines = [
-            f"Month: {today.strftime('%B %Y')}",
-            f"Total Income: RM {totals['income']:.2f}",
-            f"Total Spending: RM {totals['expense']:.2f}",
-            f"Total Savings: RM {totals['savings']:.2f}",
-            f"Net Position: RM {net:.2f}",
+        overview_lines = [
+            f"<b>Month:</b> {today.strftime('%B %Y')}",
+            f"<b>Total Income:</b> RM {totals['income']:.2f}",
+            f"<b>Total Spending:</b> RM {totals['expense']:.2f}",
+            f"<b>Total Savings:</b> RM {totals['savings']:.2f}",
+            f"<b>Net Position:</b> RM {net:.2f}",
         ]
+        self.summary_overview_label.setText("<br>".join(overview_lines))
 
         if category_totals:
-            lines.append("")
-            lines.append("Category breakdown:")
+            category_lines = []
             for category in sorted(category_totals.keys()):
                 spent = category_totals[category]
                 budget = self.budget_map.get(category)
                 if budget:
                     variance = budget - spent
                     status = "within budget" if spent <= budget else "over budget"
-                    lines.append(
-                        f"- {category}: RM {spent:.2f} / RM {budget:.2f} "
+                    category_lines.append(
+                        f"&#8226; <b>{category}:</b> RM {spent:.2f} / RM {budget:.2f} "
                         f"({status}, variance RM {variance:.2f})"
                     )
                 else:
-                    lines.append(f"- {category}: RM {spent:.2f} (no budget set)")
+                    category_lines.append(f"&#8226; <b>{category}:</b> RM {spent:.2f} (no budget set)")
+            category_html = "<b>Category breakdown:</b><br>" + "<br>".join(category_lines)
         else:
-            lines.append("")
-            lines.append("No category spending recorded this month.")
-
-        self.summary_display.setPlainText("\n".join(lines))
+            category_html = "<b>Category breakdown:</b><br>No category spending recorded this month."
+        self.summary_category_label.setText(category_html)
 
     def category_monthly_total(self, category: str) -> Decimal:
         today = date.today()
