@@ -2,3 +2,4 @@ tx_id,type,amount_rm,desc
 TX001,income,67.30,Allowance
 TX002,expense,31.00,discord sub
 TX003,expense,21.50,KFC The One Box
+TX004,income,300.00,Prize
