@@ -1,15 +1,17 @@
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton,
     QListWidget, QHBoxLayout, QGraphicsDropShadowEffect, QMessageBox,
-    QComboBox, QPlainTextEdit, QFileDialog, QDialog, QFrame
+    QComboBox, QPlainTextEdit, QFileDialog, QDialog, QFrame, QSplitter
 )
 from PyQt5.QtGui import QColor, QFont, QDoubleValidator
 from PyQt5.QtCore import Qt
 from decimal import Decimal, ROUND_HALF_UP
 from collections import defaultdict
 from datetime import date
-import csv, os, shutil, sys, stat, importlib
+import csv, os, shutil, sys, stat, importlib, json, time
 from pathlib import Path
+
+import requests
 
 Figure = None
 FigureCanvasQTAgg = None
@@ -33,6 +35,21 @@ LEGACY_BUDGET_CSV = LEGACY_DATA_DIR / "budgets.csv"
 LEDGER_HEADER = ["tx_id", "date", "type", "category", "amount_rm", "desc"]
 OLD_LEDGER_HEADER = ["tx_id", "type", "amount_rm", "desc"]
 BUDGET_HEADER = ["category", "monthly_budget_rm"]
+CURRENCY_JSON = DATA_DIR / "rates.json"
+RATES_TTL_SECONDS = 12 * 60 * 60  # reuse rates for half a day to limit network calls
+RATES_API_URL = "https://open.er-api.com/v6/latest"
+DEFAULT_TARGET_CURRENCIES = ["USD", "EUR", "GBP", "SGD", "AUD", "JPY", "CNY", "THB"]
+FALLBACK_RATES = {
+    "MYR": 1.0,
+    "USD": 0.21,
+    "EUR": 0.19,
+    "GBP": 0.16,
+    "SGD": 0.28,
+    "AUD": 0.32,
+    "JPY": 32.0,
+    "CNY": 1.52,
+    "THB": 7.4,
+}
 
 DARK_STYLESHEET = """
 QWidget { background-color: #121212; color: #E0E0E0; font-family: 'Segoe UI'; }
@@ -50,6 +67,7 @@ QFrame#Card { background-color: #1A1A1F; border: 1px solid #2C2C34; border-radiu
 QLabel#SectionTitle { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: #9FA8DA; background-color: transparent; }
 QPushButton#SecondaryButton { background-color: #2A2A33; border: 1px solid #3A3A45; border-radius: 10px; padding: 9px 12px; font-weight: 600; color: #F5F5F5; }
 QPushButton#SecondaryButton:hover { background-color: #353543; }
+QLabel#InfoText { color: #B0BEC5; font-size: 11px; background-color: transparent; }
 """.strip()
 
 LIGHT_STYLESHEET = """
@@ -68,6 +86,7 @@ QFrame#Card { background-color: #FFFFFF; border: 1px solid #E0E0E0; border-radiu
 QLabel#SectionTitle { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: #3949AB; background-color: transparent; }
 QPushButton#SecondaryButton { background-color: #F0F0F0; border: 1px solid #D0D0D0; border-radius: 10px; padding: 9px 12px; font-weight: 600; color: #1F1F1F; }
 QPushButton#SecondaryButton:hover { background-color: #E4E4E4; }
+QLabel#InfoText { color: #5F6368; font-size: 11px; background-color: transparent; }
 """.strip()
 
 def money(x) -> Decimal:
@@ -209,6 +228,40 @@ def ensure_storage() -> None:
     else:
         ensure_writable(BUDGET_CSV)
         ensure_private_file(BUDGET_CSV)
+    if not CURRENCY_JSON.exists():
+        ensure_writable(CURRENCY_JSON)
+        with CURRENCY_JSON.open("w", encoding="utf-8") as f:
+            json.dump({"base": "MYR", "timestamp": 0, "rates": FALLBACK_RATES}, f)
+        ensure_private_file(CURRENCY_JSON)
+    else:
+        ensure_private_file(CURRENCY_JSON)
+
+
+def load_cached_rates() -> dict:
+    try:
+        with CURRENCY_JSON.open(encoding="utf-8") as f:
+            data = json.load(f)
+            if isinstance(data, dict):
+                rates = data.get("rates") or {}
+                if isinstance(rates, dict):
+                    for code, value in FALLBACK_RATES.items():
+                        rates.setdefault(code, value)
+                    data["rates"] = rates
+                else:
+                    data["rates"] = FALLBACK_RATES.copy()
+                data.setdefault("base", "MYR")
+                data.setdefault("timestamp", 0)
+                return data
+    except Exception:
+        pass
+    return {"base": "MYR", "timestamp": 0, "rates": FALLBACK_RATES.copy()}
+
+
+def store_rates(data: dict) -> None:
+    ensure_writable(CURRENCY_JSON)
+    with CURRENCY_JSON.open("w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+    ensure_private_file(CURRENCY_JSON)
 
 def next_tx_id() -> str:
     if not LEDGER_CSV.exists():
@@ -231,6 +284,10 @@ class BudgetTracker(QWidget):
         self.budget_map = {}
         self.balance = Decimal("0.00")
         ensure_storage()
+        rate_snapshot = load_cached_rates()
+        self.exchange_rates = rate_snapshot.get("rates", {"MYR": 1.0})
+        self.base_currency = rate_snapshot.get("base", "MYR")
+        self.rates_timestamp = rate_snapshot.get("timestamp", 0)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
@@ -269,13 +326,12 @@ class BudgetTracker(QWidget):
         header_actions.addWidget(self.theme_btn, alignment=Qt.AlignmentFlag.AlignRight)
 
         header_layout.addLayout(header_actions)
-        layout.addWidget(header)
 
-        content_layout = QHBoxLayout()
-        content_layout.setSpacing(16)
-
-        left_column = QVBoxLayout()
-        left_column.setSpacing(16)
+        header_wrapper = QWidget()
+        header_wrapper_layout = QVBoxLayout(header_wrapper)
+        header_wrapper_layout.setContentsMargins(0, 0, 0, 0)
+        header_wrapper_layout.setSpacing(0)
+        header_wrapper_layout.addWidget(header)
 
         form_card = QFrame()
         form_card.setObjectName("Card")
@@ -314,7 +370,6 @@ class BudgetTracker(QWidget):
         btn_layout.addWidget(self.expense_btn)
         btn_layout.addWidget(self.savings_btn)
         form_layout.addLayout(btn_layout)
-        left_column.addWidget(form_card)
 
         budget_card = QFrame()
         budget_card.setObjectName("Card")
@@ -342,12 +397,42 @@ class BudgetTracker(QWidget):
         self.budget_list = QListWidget()
         self.budget_list.setMinimumHeight(120)
         budget_layout.addWidget(self.budget_list)
-        left_column.addWidget(budget_card)
 
-        left_column.addStretch(1)
+        converter_card = QFrame()
+        converter_card.setObjectName("Card")
+        converter_layout = QVBoxLayout(converter_card)
+        converter_layout.setContentsMargins(20, 20, 20, 20)
+        converter_layout.setSpacing(12)
+        converter_header = QLabel("Currency Converter")
+        converter_header.setObjectName("SectionTitle")
+        converter_layout.addWidget(converter_header)
 
-        right_column = QVBoxLayout()
-        right_column.setSpacing(16)
+        self.currency_amount_input = QLineEdit()
+        self.currency_amount_input.setPlaceholderText("Amount in MYR")
+        self.currency_amount_input.setValidator(QDoubleValidator(0.00, 1_000_000.0, 2))
+        converter_layout.addWidget(self.currency_amount_input)
+
+        self.currency_target_combo = QComboBox()
+        converter_layout.addWidget(self.currency_target_combo)
+
+        converter_buttons = QHBoxLayout()
+        converter_buttons.setSpacing(10)
+        self.currency_convert_btn = QPushButton("Convert")
+        self.currency_convert_btn.setObjectName("SecondaryButton")
+        self.currency_update_btn = QPushButton("Refresh Rates")
+        self.currency_update_btn.setObjectName("SecondaryButton")
+        converter_buttons.addWidget(self.currency_convert_btn)
+        converter_buttons.addWidget(self.currency_update_btn)
+        converter_layout.addLayout(converter_buttons)
+
+        self.currency_result_label = QLabel("Result: -")
+        self.currency_result_label.setWordWrap(True)
+        converter_layout.addWidget(self.currency_result_label)
+
+        self.currency_info_label = QLabel("Rates last updated: -")
+        self.currency_info_label.setObjectName("InfoText")
+        self.currency_info_label.setWordWrap(True)
+        converter_layout.addWidget(self.currency_info_label)
 
         ledger_card = QFrame()
         ledger_card.setObjectName("Card")
@@ -374,7 +459,7 @@ class BudgetTracker(QWidget):
         reclass_row.addWidget(self.reclass_category_input)
         reclass_row.addWidget(self.convert_btn)
         ledger_layout.addLayout(reclass_row)
-        right_column.addWidget(ledger_card)
+        self.transaction_list.currentRowChanged.connect(self.update_reclass_ui)
 
         summary_card = QFrame()
         summary_card.setObjectName("Card")
@@ -395,30 +480,76 @@ class BudgetTracker(QWidget):
         actions_row.setSpacing(10)
         self.export_btn = QPushButton("Export Monthly CSV")
         self.chart_btn = QPushButton("Show Savings Chart")
+        self.expense_chart_btn = QPushButton("Show Expense Pie")
         self.export_btn.setObjectName("SecondaryButton")
         self.chart_btn.setObjectName("SecondaryButton")
+        self.expense_chart_btn.setObjectName("SecondaryButton")
         actions_row.addWidget(self.export_btn)
         actions_row.addWidget(self.chart_btn)
+        actions_row.addWidget(self.expense_chart_btn)
         summary_layout.addLayout(actions_row)
-        right_column.addWidget(summary_card)
 
-        right_column.addStretch(1)
+        left_splitter = QSplitter(Qt.Orientation.Vertical)
+        left_splitter.setChildrenCollapsible(False)
+        left_splitter.setHandleWidth(6)
+        left_splitter.addWidget(form_card)
+        left_splitter.addWidget(budget_card)
+        left_splitter.addWidget(converter_card)
+        left_splitter.setSizes([280, 200, 200])
 
-        content_layout.addLayout(left_column, 1)
-        content_layout.addLayout(right_column, 1)
-        content_layout.setStretch(0, 1)
-        content_layout.setStretch(1, 1)
-        layout.addLayout(content_layout)
+        right_splitter = QSplitter(Qt.Orientation.Vertical)
+        right_splitter.setChildrenCollapsible(False)
+        right_splitter.setHandleWidth(6)
+        right_splitter.addWidget(ledger_card)
+        right_splitter.addWidget(summary_card)
+        right_splitter.setSizes([360, 260])
 
-        # Connect actions
+        left_container = QWidget()
+        left_container_layout = QVBoxLayout(left_container)
+        left_container_layout.setContentsMargins(0, 0, 0, 0)
+        left_container_layout.setSpacing(0)
+        left_container_layout.addWidget(left_splitter)
+
+        right_container = QWidget()
+        right_container_layout = QVBoxLayout(right_container)
+        right_container_layout.setContentsMargins(0, 0, 0, 0)
+        right_container_layout.setSpacing(0)
+        right_container_layout.addWidget(right_splitter)
+
+        content_splitter = QSplitter(Qt.Orientation.Horizontal)
+        content_splitter.setChildrenCollapsible(False)
+        content_splitter.setHandleWidth(6)
+        content_splitter.addWidget(left_container)
+        content_splitter.addWidget(right_container)
+        content_splitter.setSizes([520, 520])
+
+        content_wrapper = QWidget()
+        content_wrapper_layout = QVBoxLayout(content_wrapper)
+        content_wrapper_layout.setContentsMargins(0, 0, 0, 0)
+        content_wrapper_layout.setSpacing(0)
+        content_wrapper_layout.addWidget(content_splitter)
+
+        main_splitter = QSplitter(Qt.Orientation.Vertical)
+        main_splitter.setChildrenCollapsible(False)
+        main_splitter.setHandleWidth(6)
+        main_splitter.addWidget(header_wrapper)
+        main_splitter.addWidget(content_wrapper)
+        main_splitter.setSizes([180, 720])
+
+        layout.addWidget(main_splitter)
+
         self.income_btn.clicked.connect(lambda: self.add_tx("income"))
         self.expense_btn.clicked.connect(lambda: self.add_tx("expense"))
         self.savings_btn.clicked.connect(lambda: self.add_tx("savings"))
         self.add_budget_btn.clicked.connect(self.add_budget)
         self.export_btn.clicked.connect(self.export_monthly_data)
         self.chart_btn.clicked.connect(self.show_savings_visual)
+        self.expense_chart_btn.clicked.connect(self.show_expense_pie_chart)
+        self.currency_convert_btn.clicked.connect(self.perform_currency_conversion)
+        self.currency_update_btn.clicked.connect(self.refresh_exchange_rates)
         self.convert_btn.clicked.connect(self.reclassify_selected_transaction)
 
+        self.refresh_currency_options()
         self.apply_theme()
         self.load_ledger()
         self.load_budgets()
@@ -587,6 +718,138 @@ class BudgetTracker(QWidget):
         else:
             self.category_input.setCurrentIndex(-1)
         self.category_input.blockSignals(False)
+        self.refresh_currency_options()
+
+    def refresh_currency_options(self):
+        if not hasattr(self, "currency_target_combo"):
+            return
+        rates = self.exchange_rates or {}
+        codes = sorted(code for code in rates.keys() if code != self.base_currency)
+        if not codes:
+            codes = [code for code in DEFAULT_TARGET_CURRENCIES if code != self.base_currency]
+        self.currency_target_combo.blockSignals(True)
+        self.currency_target_combo.clear()
+        for code in codes:
+            self.currency_target_combo.addItem(code)
+        self.currency_target_combo.blockSignals(False)
+        if self.currency_target_combo.count() > 0:
+            self.currency_target_combo.setCurrentIndex(0)
+        self.update_rates_info_label()
+
+    def update_rates_info_label(self):
+        if not hasattr(self, "currency_info_label"):
+            return
+        if not self.rates_timestamp:
+            self.currency_info_label.setText("Rates last updated: never. Refresh to download the latest public market rates.")
+            return
+        last_updated = time.strftime("%d %b %Y %H:%M", time.localtime(self.rates_timestamp))
+        self.currency_info_label.setText(
+            f"Rates last updated: {last_updated} (source: open.er-api.com)"
+        )
+
+    def perform_currency_conversion(self):
+        if not hasattr(self, "currency_amount_input"):
+            return
+        amount_text = self.currency_amount_input.text().strip()
+        if not amount_text:
+            QMessageBox.information(self, "Missing amount", "Enter an amount in MYR to convert.")
+            return
+        try:
+            amount = money(amount_text)
+        except Exception:
+            QMessageBox.critical(self, "Invalid amount", "Enter a valid numeric amount, e.g. 50.00")
+            return
+        target_code = self.currency_target_combo.currentText()
+        if not target_code:
+            QMessageBox.warning(self, "Choose currency", "Select a target currency.")
+            return
+        rate = self.exchange_rates.get(target_code)
+        if rate is None:
+            if not self._update_exchange_rates(show_message=False):
+                QMessageBox.warning(
+                    self,
+                    "Missing rate",
+                    "Could not download exchange rates. Please try again later.",
+                )
+                return
+            rate = self.exchange_rates.get(target_code)
+            if rate is None:
+                QMessageBox.warning(
+                    self,
+                    "Missing rate",
+                    "That currency does not have a cached rate yet. Refresh rates first.",
+                )
+                return
+        converted = money(amount * Decimal(str(rate)))
+        self.currency_result_label.setText(
+            f"Result: {self.base_currency} {amount:.2f} = {target_code} {converted:.2f}"
+        )
+
+    def refresh_exchange_rates(self):
+        self._update_exchange_rates(show_message=True)
+
+    def _update_exchange_rates(self, show_message: bool = True) -> bool:
+        if not hasattr(self, "currency_update_btn"):
+            return False
+        try:
+            response = requests.get(
+                f"{RATES_API_URL}/{self.base_currency}",
+                timeout=10,
+            )
+            response.raise_for_status()
+            payload = response.json()
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "Update failed",
+                f"Could not download exchange rates.\nReason: {exc}",
+            )
+            return False
+
+        if payload.get("result") != "success":
+            message = payload.get("error-type") or payload.get("documentation") or "Unknown error."
+            QMessageBox.critical(
+                self,
+                "Update failed",
+                f"The rate service returned an error:\n{message}",
+            )
+            return False
+
+        rates = payload.get("conversion_rates")
+        if not isinstance(rates, dict) or not rates:
+            snippet = json.dumps(payload, indent=2)[:400] if isinstance(payload, dict) else str(payload)[:400]
+            QMessageBox.critical(
+                self,
+                "Update failed",
+                f"The rate service returned an unexpected response.\nPayload snippet:\n{snippet}",
+            )
+            return False
+
+        cleaned = {}
+        for code, value in rates.items():
+            try:
+                cleaned[code] = float(value)
+            except (TypeError, ValueError):
+                continue
+        cleaned[self.base_currency] = 1.0
+        self.exchange_rates = cleaned
+        self.rates_timestamp = int(payload.get("time_last_update_unix") or time.time())
+        store_rates(
+            {
+                "base": self.base_currency,
+                "timestamp": self.rates_timestamp,
+                "rates": self.exchange_rates,
+            }
+        )
+        self.refresh_currency_options()
+        self.currency_result_label.setText("Result: -")
+        if show_message:
+            QMessageBox.information(
+                self,
+                "Rates updated",
+                "Latest exchange rates downloaded from open.er-api.com. No personal data was shared during this request.",
+            )
+        return True
 
     def update_summary(self):
         if not self.transactions:
@@ -664,6 +927,21 @@ class BudgetTracker(QWidget):
                 total += tx["amount"]
         return total
 
+    def update_reclass_ui(self, row: int):
+        if not hasattr(self, "reclass_type_combo"):
+            return
+        if row < 0 or row >= len(self.transactions):
+            self.reclass_type_combo.setCurrentIndex(0)
+            self.reclass_category_input.clear()
+            return
+        tx = self.transactions[row]
+        idx = self.reclass_type_combo.findText(tx["type"])
+        if idx >= 0:
+            self.reclass_type_combo.blockSignals(True)
+            self.reclass_type_combo.setCurrentIndex(idx)
+            self.reclass_type_combo.blockSignals(False)
+        self.reclass_category_input.setText(tx["category"] or "")
+
     def reclassify_selected_transaction(self):
         row = self.transaction_list.currentRow()
         if row < 0 or row >= len(self.transactions):
@@ -705,7 +983,7 @@ class BudgetTracker(QWidget):
                 f"Convert transaction {tx['tx_id']}?\n"
                 f"Amount: RM {tx['amount']:.2f}\n"
                 f"Original type: {tx['type']}\n"
-                f"Original category: {tx['category']}\n"
+                f"Original category: {tx['category'] or 'N/A'}\n"
                 f"New type: {new_type}\n"
                 f"New category: {category}"
             ),
@@ -855,6 +1133,76 @@ class BudgetTracker(QWidget):
         canvas.draw()
         dialog.exec_()
 
+    def show_expense_pie_chart(self):
+        monthly_expenses = self.current_month_transactions("expense")
+        if not monthly_expenses:
+            QMessageBox.information(self, "No expenses recorded", "Log some expenses to view the pie chart.")
+            return
+        if not MATPLOTLIB_AVAILABLE or Figure is None or FigureCanvasQTAgg is None:
+            QMessageBox.warning(
+                self,
+                "Visualization unavailable",
+                "matplotlib is required to render charts.\nInstall it with: pip install matplotlib",
+            )
+            return
+        totals = defaultdict(lambda: Decimal("0.00"))
+        for tx in monthly_expenses:
+            category = tx["category"] or "General"
+            totals[category] += tx["amount"]
+        categories = [cat for cat, total in totals.items() if total > 0]
+        if not categories:
+            QMessageBox.information(self, "No expenses recorded", "No positive expenses available for this month.")
+            return
+        values = [float(totals[cat]) for cat in categories]
+        total_sum = sum(values)
+        if total_sum <= 0:
+            QMessageBox.information(self, "No expenses recorded", "No positive expenses available for this month.")
+            return
+
+        fig = Figure(figsize=(6, 4))
+        ax = fig.add_subplot(111)
+        try:
+            import matplotlib
+            cmap = matplotlib.colormaps["viridis"]
+            colors = [cmap(i / len(values)) for i in range(len(values))]
+        except Exception:
+            colors = None
+        text_color = "#FFFFFF" if self.theme_mode == "dark" else "#212121"
+        wedges, texts = ax.pie(
+            values,
+            labels=None,
+            autopct=None,
+            startangle=90,
+            colors=colors,
+            textprops={"color": text_color},
+        )
+        legend_labels = [f"{cat}: RM {val:.2f}" for cat, val in zip(categories, values, strict=False)]
+        legend = ax.legend(
+            wedges,
+            legend_labels,
+            title="Categories",
+            loc="center left",
+            bbox_to_anchor=(1, 0.5),
+            facecolor="#2B2B34" if self.theme_mode == "dark" else "#F2F2F2",
+            edgecolor="#3C3C45" if self.theme_mode == "dark" else "#D0D0D0",
+        )
+        for text in legend.get_texts():
+            text.set_color(text_color)
+        legend.get_title().set_color(text_color)
+        ax.axis("equal")
+        ax.set_title(f"Monthly Expenses ({date.today().strftime('%B %Y')})")
+        fig.tight_layout()
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Monthly Expenses Pie Chart")
+        dialog.resize(640, 420)
+        layout = QVBoxLayout(dialog)
+        canvas = FigureCanvasQTAgg(fig)
+        layout.addWidget(canvas)
+        canvas.draw()
+        dialog.exec_()
+
+
     def add_tx(self, ttype: str):
         amt_text = self.amount_input.text().strip()
         if not amt_text:
@@ -933,3 +1281,4 @@ if __name__ == "__main__":
     win = BudgetTracker()
     win.show()
     sys.exit(app.exec_())
+
