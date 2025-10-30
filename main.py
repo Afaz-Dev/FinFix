@@ -1,15 +1,28 @@
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton,
     QListWidget, QHBoxLayout, QGraphicsDropShadowEffect, QMessageBox,
-    QComboBox, QPlainTextEdit
+    QComboBox, QPlainTextEdit, QFileDialog, QDialog
 )
 from PyQt5.QtGui import QColor, QFont, QDoubleValidator
 from PyQt5.QtCore import Qt
 from decimal import Decimal, ROUND_HALF_UP
 from collections import defaultdict
 from datetime import date
-import csv, os, shutil, sys, stat
+import csv, os, shutil, sys, stat, importlib
 from pathlib import Path
+
+Figure = None
+FigureCanvasQTAgg = None
+MATPLOTLIB_AVAILABLE = False
+
+try:
+    matplotlib_figure = importlib.import_module("matplotlib.figure")
+    matplotlib_backend = importlib.import_module("matplotlib.backends.backend_qt5agg")
+    Figure = getattr(matplotlib_figure, "Figure", None)
+    FigureCanvasQTAgg = getattr(matplotlib_backend, "FigureCanvasQTAgg", None)
+    MATPLOTLIB_AVAILABLE = Figure is not None and FigureCanvasQTAgg is not None
+except Exception:
+    MATPLOTLIB_AVAILABLE = False
 
 DATA_DIR = Path.home() / ".finfix_data"
 LEGACY_DATA_DIR = Path("data")
@@ -292,11 +305,20 @@ class BudgetTracker(QWidget):
         self.summary_display.setPlaceholderText("Summaries will appear here once you start logging transactions.")
         layout.addWidget(self.summary_display)
 
+        export_layout = QHBoxLayout()
+        self.export_btn = QPushButton("Export Monthly CSV")
+        self.chart_btn = QPushButton("Show Savings Chart")
+        export_layout.addWidget(self.export_btn)
+        export_layout.addWidget(self.chart_btn)
+        layout.addLayout(export_layout)
+
         # Connect actions
         self.income_btn.clicked.connect(lambda: self.add_tx("income"))
         self.expense_btn.clicked.connect(lambda: self.add_tx("expense"))
         self.savings_btn.clicked.connect(lambda: self.add_tx("savings"))
         self.add_budget_btn.clicked.connect(self.add_budget)
+        self.export_btn.clicked.connect(self.export_monthly_data)
+        self.chart_btn.clicked.connect(self.show_savings_visual)
 
         self.apply_theme()
         self.load_ledger()
@@ -377,6 +399,21 @@ class BudgetTracker(QWidget):
             tx_id = tx["tx_id"] or "-"
             display = f"{tx['date']} | {tx['category']} | {sign} RM{tx['amount']:.2f} | {tx['desc']}  ({tx_id})"
             self.transaction_list.addItem(display)
+
+    def current_month_transactions(self, type_filter: str | None = None) -> list[dict]:
+        today = date.today()
+        matches: list[dict] = []
+        for tx in self.transactions:
+            try:
+                tx_date = date.fromisoformat(tx["date"])
+            except ValueError:
+                continue
+            if tx_date.year != today.year or tx_date.month != today.month:
+                continue
+            if type_filter and tx["type"] != type_filter:
+                continue
+            matches.append(tx)
+        return matches
 
     def load_budgets(self):
         self.budget_list.clear()
@@ -527,6 +564,94 @@ class BudgetTracker(QWidget):
             if tx_date.year == today.year and tx_date.month == today.month:
                 total += tx["amount"]
         return total
+
+    def export_monthly_data(self):
+        monthly = self.current_month_transactions()
+        if not monthly:
+            QMessageBox.information(self, "Nothing to export", "No transactions recorded for the current month.")
+            return
+        default_name = f"student_budget_{date.today().strftime('%Y_%m')}.csv"
+        suggested_path = Path.home() / default_name
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Monthly Data",
+            str(suggested_path),
+            "CSV Files (*.csv)",
+        )
+        if not file_path:
+            return
+        try:
+            with open(file_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(["date", "type", "category", "amount_rm", "description", "tx_id"])
+                for tx in monthly:
+                    writer.writerow([
+                        tx["date"],
+                        tx["type"],
+                        tx["category"],
+                        f"{tx['amount']:.2f}",
+                        tx["desc"],
+                        tx["tx_id"],
+                    ])
+        except Exception as exc:
+            QMessageBox.critical(self, "Export failed", f"Could not export data:\n{exc}")
+            return
+        QMessageBox.information(self, "Export complete", f"Monthly data exported to:\n{file_path}")
+
+    def show_savings_visual(self):
+        monthly_savings = self.current_month_transactions("savings")
+        if not monthly_savings:
+            QMessageBox.information(self, "No savings recorded", "Log some savings transactions to view the chart.")
+            return
+        if not MATPLOTLIB_AVAILABLE:
+            QMessageBox.warning(
+                self,
+                "Visualization unavailable",
+                "matplotlib is required to render charts.\nInstall it with: pip install matplotlib",
+            )
+            return
+        if Figure is None or FigureCanvasQTAgg is None:
+            QMessageBox.warning(
+                self,
+                "Visualization unavailable",
+                "matplotlib could not be loaded in this environment.",
+            )
+            return
+        totals = defaultdict(lambda: Decimal("0.00"))
+        for tx in monthly_savings:
+            totals[tx["category"]] += tx["amount"]
+        categories = sorted(totals.keys())
+        if not categories:
+            QMessageBox.information(self, "No savings categories", "Savings entries need a category to build the chart.")
+            return
+        values = [float(totals[cat]) for cat in categories]
+
+        fig = Figure(figsize=(6, 4))
+        ax = fig.add_subplot(111)
+        bars = ax.bar(categories, values, color="#03A9F4")
+        ax.set_title(f"Monthly Savings ({date.today().strftime('%B %Y')})")
+        ax.set_ylabel("Amount (RM)")
+        ax.set_ylim(bottom=0)
+        ax.tick_params(axis="x", labelrotation=20)
+        for bar, val in zip(bars, values, strict=False):
+            ax.text(
+                bar.get_x() + bar.get_width() / 2,
+                bar.get_height(),
+                f"RM {val:.2f}",
+                ha="center",
+                va="bottom",
+                fontsize=8,
+            )
+        fig.tight_layout()
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Monthly Savings Visualization")
+        dialog.resize(640, 420)
+        layout = QVBoxLayout(dialog)
+        canvas = FigureCanvasQTAgg(fig)
+        layout.addWidget(canvas)
+        canvas.draw()
+        dialog.exec_()
 
     def add_tx(self, ttype: str):
         amt_text = self.amount_input.text().strip()
