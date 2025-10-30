@@ -36,7 +36,7 @@ class BudgetTracker(QWidget):
         layout = QVBoxLayout()
 
         # --- Title ---
-        title = QLabel("Student Budget Tracker 💰")
+        title = QLabel("Student Budget Tracker")
         title.setFont(QFont("Segoe UI", 14, QFont.Bold))
         title.setAlignment(Qt.AlignCenter)
         layout.addWidget(title)
@@ -112,11 +112,11 @@ class BudgetTracker(QWidget):
             amount = float(self.amount_input.text())
             desc = self.desc_input.text() or "No description"
             self.balance += amount
-            self.transaction_list.addItem(f"+ RM{amount:.2f} — {desc}")
+            self.transaction_list.addItem(f"+ RM{amount:.2f} | {desc}")
             self.update_balance()
             self.clear_inputs()
         except ValueError:
-            self.transaction_list.addItem("⚠ Invalid income input")
+            self.transaction_list.addItem("Invalid income input")
 
     # ---- Add Expense ----
     def add_expense(self):
@@ -124,11 +124,11 @@ class BudgetTracker(QWidget):
             amount = float(self.amount_input.text())
             desc = self.desc_input.text() or "No description"
             self.balance -= amount
-            self.transaction_list.addItem(f"- RM{amount:.2f} — {desc}")
+            self.transaction_list.addItem(f"- RM{amount:.2f} | {desc}")
             self.update_balance()
             self.clear_inputs()
         except ValueError:
-            self.transaction_list.addItem("⚠ Invalid expense input")
+            self.transaction_list.addItem("Invalid expense input")
 
     # ---- Update Balance ----
     def update_balance(self):
