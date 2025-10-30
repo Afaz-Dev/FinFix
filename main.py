@@ -1,7 +1,7 @@
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton,
     QListWidget, QHBoxLayout, QGraphicsDropShadowEffect, QMessageBox,
-    QComboBox, QPlainTextEdit, QFileDialog, QDialog, QFrame, QSplitter, QDialogButtonBox
+    QComboBox, QPlainTextEdit, QFileDialog, QDialog, QFrame, QSplitter, QDialogButtonBox, QWhatsThis
 )
 from PyQt5.QtGui import QColor, QFont, QDoubleValidator, QHelpEvent
 from PyQt5.QtCore import Qt, QEvent
@@ -321,8 +321,25 @@ class HelpAwareDialog(QDialog):
             self.setWindowFlag(WINDOW_CONTEXT_HELP_HINT, True)
 
     def event(self, event):
-        if isinstance(event, QHelpEvent) or (HELP_EVENT_TYPES and event.type() in HELP_EVENT_TYPES):
+        event_type = event.type()
+        enter_mode_type = next(
+            (
+                t
+                for t in (
+                    getattr(QEvent, "EnterWhatsThisMode", None),
+                    getattr(QEvent.Type, "EnterWhatsThisMode", None),
+                )
+                if t is not None
+            ),
+            None,
+        )
+        if enter_mode_type is not None and event_type == enter_mode_type:
             QMessageBox.information(self, self._help_title, self._help_text)
+            QWhatsThis.leaveWhatsThisMode()
+            return True
+        if isinstance(event, QHelpEvent) or (HELP_EVENT_TYPES and event_type in HELP_EVENT_TYPES):
+            QMessageBox.information(self, self._help_title, self._help_text)
+            QWhatsThis.leaveWhatsThisMode()
             return True
         return super().event(event)
 
