@@ -946,6 +946,66 @@ class BudgetTracker(QWidget):
             self.reclass_type_combo.blockSignals(False)
         self.reclass_category_input.setText(tx["category"] or "")
 
+    def edit_selected_savings(self):
+        row = self.transaction_list.currentRow()
+        if row < 0 or row >= len(self.transactions):
+            QMessageBox.information(self, "Select a transaction", "Choose a savings transaction to edit.")
+            return
+
+        tx = self.transactions[row]
+        if tx["type"] != "savings":
+            QMessageBox.information(self, "Not a savings entry", "Only savings transactions can be edited with this action.")
+            return
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Edit Savings Entry")
+        layout = QVBoxLayout(dialog)
+
+        amount_edit = QLineEdit(f"{tx['amount']:.2f}")
+        amount_edit.setValidator(QDoubleValidator(0.01, 1_000_000.0, 2))
+        layout.addWidget(QLabel("Amount (RM)"))
+        layout.addWidget(amount_edit)
+
+        desc_edit = QLineEdit(tx["desc"])
+        layout.addWidget(QLabel("Description"))
+        layout.addWidget(desc_edit)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+
+        if dialog.exec_() != QDialog.Accepted:
+            return
+
+        amount_text = amount_edit.text().strip()
+        if not amount_text:
+            QMessageBox.warning(self, "Missing amount", "Enter an amount to continue.")
+            return
+        try:
+            new_amount = money(amount_text)
+            if new_amount <= 0:
+                raise ValueError
+        except Exception:
+            QMessageBox.critical(self, "Invalid amount", "Enter a valid numeric amount, e.g. 50.00")
+            return
+
+        new_desc = desc_edit.text().strip() or "No description"
+
+        if not self.update_transaction_record(tx["tx_id"], new_amount=new_amount, new_desc=new_desc):
+            QMessageBox.critical(self, "Update failed", "Could not update the savings entry in the ledger.")
+            return
+
+        self.load_ledger()
+        self.load_budgets()
+        self.refresh_category_options()
+        self.update_balance()
+        self.update_summary()
+        if 0 <= row < self.transaction_list.count():
+            self.transaction_list.setCurrentRow(row)
+        QMessageBox.information(self, "Savings updated", "Savings entry updated successfully.")
+
+
     def reclassify_selected_transaction(self):
         row = self.transaction_list.currentRow()
         if row < 0 or row >= len(self.transactions):
@@ -1011,7 +1071,14 @@ class BudgetTracker(QWidget):
         self.reclass_category_input.clear()
         QMessageBox.information(self, "Updated", "Transaction has been updated.")
 
-    def update_transaction_record(self, tx_id: str, new_type: str, new_category: str) -> bool:
+    def update_transaction_record(
+        self,
+        tx_id: str,
+        new_type: str | None = None,
+        new_category: str | None = None,
+        new_amount: Decimal | None = None,
+        new_desc: str | None = None,
+    ) -> bool:
         if not tx_id:
             return False
         try:
@@ -1025,8 +1092,14 @@ class BudgetTracker(QWidget):
         updated = False
         for row in rows:
             if row.get("tx_id") == tx_id:
-                row["type"] = new_type
-                row["category"] = new_category
+                if new_type is not None:
+                    row["type"] = new_type
+                if new_category is not None:
+                    row["category"] = new_category
+                if new_amount is not None:
+                    row["amount_rm"] = f"{Decimal(new_amount):.2f}"
+                if new_desc is not None:
+                    row["desc"] = new_desc
                 updated = True
                 break
         if not updated:
