@@ -1,7 +1,7 @@
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton,
     QListWidget, QHBoxLayout, QGraphicsDropShadowEffect, QMessageBox,
-    QComboBox, QPlainTextEdit, QFileDialog, QDialog, QFrame, QSplitter, QDialogButtonBox, QWhatsThis
+    QComboBox, QPlainTextEdit, QFileDialog, QDialog, QFrame, QSplitter, QDialogButtonBox, QWhatsThis, QSizePolicy
 )
 from PyQt5.QtGui import QColor, QFont, QDoubleValidator, QHelpEvent
 from PyQt5.QtCore import Qt, QEvent
@@ -368,11 +368,11 @@ class BudgetTracker(QWidget):
         header = QFrame()
         header.setObjectName("HeaderBar")
         header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(24, 18, 24, 18)
-        header_layout.setSpacing(24)
+        header_layout.setContentsMargins(16, 12, 16, 12)
+        header_layout.setSpacing(16)
 
         title_container = QVBoxLayout()
-        title_container.setSpacing(4)
+        title_container.setSpacing(2)
         title_label = QLabel("Student Budget Tracker")
         title_label.setObjectName("Title")
         subtitle = QLabel("Track spending, budgets, and savings with a clear monthly view.")
@@ -384,7 +384,7 @@ class BudgetTracker(QWidget):
         header_layout.addStretch(1)
 
         header_actions = QVBoxLayout()
-        header_actions.setSpacing(8)
+        header_actions.setSpacing(4)
         header_actions.setAlignment(Qt.AlignmentFlag.AlignRight)
 
         self.balance_label = QLabel("Net Position: RM 0.00")
@@ -404,6 +404,9 @@ class BudgetTracker(QWidget):
         header_wrapper_layout.setContentsMargins(0, 0, 0, 0)
         header_wrapper_layout.setSpacing(0)
         header_wrapper_layout.addWidget(header)
+        header_height = header.sizeHint().height()
+        header_wrapper.setFixedHeight(header_height)
+        header_wrapper.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         form_card = QFrame()
         form_card.setObjectName("Card")
@@ -613,7 +616,9 @@ class BudgetTracker(QWidget):
         main_splitter.setHandleWidth(6)
         main_splitter.addWidget(header_wrapper)
         main_splitter.addWidget(content_wrapper)
-        main_splitter.setSizes([180, 720])
+        main_splitter.setStretchFactor(0, 0)
+        main_splitter.setStretchFactor(1, 1)
+        main_splitter.setSizes([header_height, max(header_height, 720)])
 
         layout.addWidget(main_splitter)
 
