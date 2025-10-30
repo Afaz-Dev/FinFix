@@ -3,7 +3,7 @@ from PyQt5.QtWidgets import (
     QListWidget, QHBoxLayout, QGraphicsDropShadowEffect, QMessageBox,
     QComboBox, QPlainTextEdit, QFileDialog, QDialog, QFrame, QSplitter, QDialogButtonBox
 )
-from PyQt5.QtGui import QColor, QFont, QDoubleValidator
+from PyQt5.QtGui import QColor, QFont, QDoubleValidator, QHelpEvent
 from PyQt5.QtCore import Qt, QEvent
 from decimal import Decimal, ROUND_HALF_UP
 from collections import defaultdict
@@ -298,7 +298,16 @@ def next_tx_id() -> str:
     return f"TX{int(last)+1:03d}"
 
 WINDOW_CONTEXT_HELP_HINT = getattr(Qt, "WindowContextHelpButtonHint", None)
-CONTEXT_HELP_EVENT_TYPE = getattr(QEvent, "ContextHelp", None)
+HELP_EVENT_TYPES = {
+    t
+    for t in (
+        getattr(QEvent, "ContextHelp", None),
+        getattr(QEvent.Type, "ContextHelp", None),
+        getattr(QEvent, "HelpRequest", None),
+        getattr(QEvent.Type, "HelpRequest", None),
+    )
+    if t is not None
+}
 
 
 class HelpAwareDialog(QDialog):
@@ -312,7 +321,7 @@ class HelpAwareDialog(QDialog):
             self.setWindowFlag(WINDOW_CONTEXT_HELP_HINT, True)
 
     def event(self, event):
-        if CONTEXT_HELP_EVENT_TYPE is not None and event.type() == CONTEXT_HELP_EVENT_TYPE:
+        if isinstance(event, QHelpEvent) or (HELP_EVENT_TYPES and event.type() in HELP_EVENT_TYPES):
             QMessageBox.information(self, self._help_title, self._help_text)
             return True
         return super().event(event)
