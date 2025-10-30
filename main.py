@@ -50,6 +50,17 @@ FALLBACK_RATES = {
     "CNY": 1.52,
     "THB": 7.4,
 }
+FALLBACK_NAMES = {
+    "MYR": "Malaysian Ringgit",
+    "USD": "US Dollar",
+    "EUR": "Euro",
+    "GBP": "British Pound",
+    "SGD": "Singapore Dollar",
+    "AUD": "Australian Dollar",
+    "JPY": "Japanese Yen",
+    "CNY": "Chinese Yuan",
+    "THB": "Thai Baht",
+}
 
 DARK_STYLESHEET = """
 QWidget { background-color: #121212; color: #E0E0E0; font-family: 'Segoe UI'; }
@@ -288,6 +299,7 @@ class BudgetTracker(QWidget):
         self.exchange_rates = rate_snapshot.get("rates", {"MYR": 1.0})
         self.base_currency = rate_snapshot.get("base", "MYR")
         self.rates_timestamp = rate_snapshot.get("timestamp", 0)
+        self.selected_currency_code = None
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
@@ -413,6 +425,10 @@ class BudgetTracker(QWidget):
         converter_layout.addWidget(self.currency_amount_input)
 
         self.currency_target_combo = QComboBox()
+        self.currency_target_combo.setEditable(True)
+        line_edit = self.currency_target_combo.lineEdit()
+        if line_edit is not None:
+            line_edit.setPlaceholderText("Search currency (e.g., USD - US Dollar)")
         converter_layout.addWidget(self.currency_target_combo)
 
         converter_buttons = QHBoxLayout()
@@ -728,16 +744,32 @@ class BudgetTracker(QWidget):
         if not hasattr(self, "currency_target_combo"):
             return
         rates = self.exchange_rates or {}
-        codes = sorted(code for code in rates.keys() if code != self.base_currency)
+        codes = sorted(code for code in rates.keys() if code != self.base_currency and code != 'ILS')
         if not codes:
-            codes = [code for code in DEFAULT_TARGET_CURRENCIES if code != self.base_currency]
-        self.currency_target_combo.blockSignals(True)
-        self.currency_target_combo.clear()
+            codes = [code for code in DEFAULT_TARGET_CURRENCIES if code != self.base_currency and code != 'ILS']
+        display_pairs = []
         for code in codes:
-            self.currency_target_combo.addItem(code)
+            name = FALLBACK_NAMES.get(code, code)
+            display_pairs.append((code, f"{code} - {name}"))
+        self.currency_target_combo.blockSignals(True)
+        current_index = self.currency_target_combo.currentIndex()
+        current_code = self.currency_target_combo.itemData(current_index) if current_index >= 0 else None
+        self.currency_target_combo.clear()
+        matched_index = -1
+        for index, (code, label) in enumerate(display_pairs):
+            self.currency_target_combo.addItem(label, code)
+            if code == current_code:
+                matched_index = index
         self.currency_target_combo.blockSignals(False)
-        if self.currency_target_combo.count() > 0:
+        if matched_index >= 0:
+            self.currency_target_combo.setCurrentIndex(matched_index)
+        elif self.currency_target_combo.count() > 0:
             self.currency_target_combo.setCurrentIndex(0)
+        current_index = self.currency_target_combo.currentIndex()
+        self.selected_currency_code = self.currency_target_combo.itemData(current_index) if current_index >= 0 else None
+        line_edit = self.currency_target_combo.lineEdit()
+        if line_edit is not None:
+            line_edit.selectAll()
         self.update_rates_info_label()
 
     def update_rates_info_label(self):
@@ -763,7 +795,13 @@ class BudgetTracker(QWidget):
         except Exception:
             QMessageBox.critical(self, "Invalid amount", "Enter a valid numeric amount, e.g. 50.00")
             return
-        target_code = self.currency_target_combo.currentText()
+        current_index = self.currency_target_combo.currentIndex()
+        if current_index < 0:
+            QMessageBox.warning(self, "Choose currency", "Select a target currency.")
+            return
+        target_code = self.currency_target_combo.itemData(current_index)
+        if not target_code:
+            target_code = self.currency_target_combo.currentText().split(" - ")[0].strip()
         if not target_code:
             QMessageBox.warning(self, "Choose currency", "Select a target currency.")
             return
@@ -790,44 +828,61 @@ class BudgetTracker(QWidget):
         )
 
     def refresh_exchange_rates(self):
-        self._update_exchange_rates(show_message=True)
+        self._update_exchange_rates(show_message=True, force=True)
 
-    def _update_exchange_rates(self, show_message: bool = True) -> bool:
+    def _update_exchange_rates(self, show_message: bool = True, force: bool = False) -> bool:
+        now = int(time.time())
+        if not force and self.rates_timestamp and now - self.rates_timestamp < RATES_TTL_SECONDS:
+            if show_message:
+                QMessageBox.information(
+                    self,
+                    "Rates up to date",
+                    "Using cached exchange rates saved earlier in this session.",
+                )
+            return True
         if not hasattr(self, "currency_update_btn"):
             return False
+
+        fetched = None
         try:
             response = requests.get(
                 f"{RATES_API_URL}/{self.base_currency}",
                 timeout=10,
             )
             response.raise_for_status()
-            payload = response.json()
+            fetched = response.json()
         except Exception as exc:
-            QMessageBox.critical(
-                self,
-                "Update failed",
-                f"Could not download exchange rates.\nReason: {exc}",
-            )
-            return False
+            if show_message:
+                QMessageBox.warning(
+                    self,
+                    "Using cached rates",
+                    f"Could not download exchange rates right now. Retaining your previous rates.\nReason: {exc}",
+                )
+            return bool(self.exchange_rates)
 
-        if payload.get("result") != "success":
-            message = payload.get("error-type") or payload.get("documentation") or "Unknown error."
-            QMessageBox.critical(
-                self,
-                "Update failed",
-                f"The rate service returned an error:\n{message}",
-            )
-            return False
+        if fetched is None:
+            return bool(self.exchange_rates)
 
-        rates = payload.get("conversion_rates")
+        if fetched.get("result") != "success":
+            message = fetched.get("error-type") or fetched.get("documentation") or "Unknown error."
+            if show_message:
+                QMessageBox.warning(
+                    self,
+                    "Using cached rates",
+                    f"The rate service returned an error. Keeping cached rates.\nDetails: {message}",
+                )
+            return bool(self.exchange_rates)
+
+        rates = fetched.get("rates") or fetched.get("conversion_rates")
         if not isinstance(rates, dict) or not rates:
-            snippet = json.dumps(payload, indent=2)[:400] if isinstance(payload, dict) else str(payload)[:400]
-            QMessageBox.critical(
-                self,
-                "Update failed",
-                f"The rate service returned an unexpected response.\nPayload snippet:\n{snippet}",
-            )
-            return False
+            snippet = json.dumps(fetched, indent=2)[:400] if isinstance(fetched, dict) else str(fetched)[:400]
+            if show_message:
+                QMessageBox.warning(
+                    self,
+                    "Using cached rates",
+                    f"Unexpected response from rate service. Keeping cached rates.\nPayload snippet:\n{snippet}",
+                )
+            return bool(self.exchange_rates)
 
         cleaned = {}
         for code, value in rates.items():
@@ -837,7 +892,7 @@ class BudgetTracker(QWidget):
                 continue
         cleaned[self.base_currency] = 1.0
         self.exchange_rates = cleaned
-        self.rates_timestamp = int(payload.get("time_last_update_unix") or time.time())
+        self.rates_timestamp = int(fetched.get("time_last_update_unix") or time.time())
         store_rates(
             {
                 "base": self.base_currency,
