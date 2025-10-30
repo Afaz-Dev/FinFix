@@ -1,7 +1,7 @@
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton,
     QListWidget, QHBoxLayout, QGraphicsDropShadowEffect, QMessageBox,
-    QComboBox, QPlainTextEdit, QFileDialog, QDialog, QFrame, QSplitter
+    QComboBox, QPlainTextEdit, QFileDialog, QDialog, QFrame, QSplitter, QDialogButtonBox
 )
 from PyQt5.QtGui import QColor, QFont, QDoubleValidator
 from PyQt5.QtCore import Qt
@@ -455,9 +455,12 @@ class BudgetTracker(QWidget):
         self.reclass_category_input.setPlaceholderText("New category (optional)")
         self.convert_btn = QPushButton("Reclassify Selected Transaction")
         self.convert_btn.setObjectName("SecondaryButton")
+        self.edit_savings_btn = QPushButton("Edit Savings Entry")
+        self.edit_savings_btn.setObjectName("SecondaryButton")
         reclass_row.addWidget(self.reclass_type_combo)
         reclass_row.addWidget(self.reclass_category_input)
         reclass_row.addWidget(self.convert_btn)
+        reclass_row.addWidget(self.edit_savings_btn)
         ledger_layout.addLayout(reclass_row)
         self.transaction_list.currentRowChanged.connect(self.update_reclass_ui)
 
@@ -548,6 +551,7 @@ class BudgetTracker(QWidget):
         self.currency_convert_btn.clicked.connect(self.perform_currency_conversion)
         self.currency_update_btn.clicked.connect(self.refresh_exchange_rates)
         self.convert_btn.clicked.connect(self.reclassify_selected_transaction)
+        self.edit_savings_btn.clicked.connect(self.edit_selected_savings)
 
         self.refresh_currency_options()
         self.apply_theme()
