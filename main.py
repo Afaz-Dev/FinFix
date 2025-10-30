@@ -368,11 +368,11 @@ class BudgetTracker(QWidget):
         header = QFrame()
         header.setObjectName("HeaderBar")
         header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(16, 12, 16, 12)
-        header_layout.setSpacing(16)
+        header_layout.setContentsMargins(20, 14, 20, 14)
+        header_layout.setSpacing(18)
 
         title_container = QVBoxLayout()
-        title_container.setSpacing(2)
+        title_container.setSpacing(4)
         title_label = QLabel("Student Budget Tracker")
         title_label.setObjectName("Title")
         subtitle = QLabel("Track spending, budgets, and savings with a clear monthly view.")
@@ -384,7 +384,7 @@ class BudgetTracker(QWidget):
         header_layout.addStretch(1)
 
         header_actions = QVBoxLayout()
-        header_actions.setSpacing(4)
+        header_actions.setSpacing(8)
         header_actions.setAlignment(Qt.AlignmentFlag.AlignRight)
 
         self.balance_label = QLabel("Net Position: RM 0.00")
@@ -404,7 +404,16 @@ class BudgetTracker(QWidget):
         header_wrapper_layout.setContentsMargins(0, 0, 0, 0)
         header_wrapper_layout.setSpacing(0)
         header_wrapper_layout.addWidget(header)
-        header_height = header.sizeHint().height()
+        margins = header_layout.contentsMargins()
+        balance_height = self.balance_label.sizeHint().height()
+        theme_height = self.theme_btn.sizeHint().height()
+        actions_spacing = header_actions.spacing()
+        stack_height = balance_height + theme_height + actions_spacing
+        header_height = max(
+            header.sizeHint().height(),
+            stack_height + margins.top() + margins.bottom() + 4,
+            110,
+        )
         header_wrapper.setFixedHeight(header_height)
         header_wrapper.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
