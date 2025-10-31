@@ -1506,10 +1506,12 @@ class BudgetTracker(QMainWindow):
             "income": Decimal("0.00"),
             "expense": Decimal("0.00"),
             "savings": Decimal("0.00"),
+            "savings_balance": Decimal("0.00"),
         }
         category_totals: defaultdict[str, Decimal] = defaultdict(lambda: Decimal("0.00"))
         daily_expense: defaultdict[int, Decimal] = defaultdict(lambda: Decimal("0.00"))
         month_transactions: list[tuple[dict, date]] = []
+        month_end = date(year, month, calendar.monthrange(year, month)[1])
 
         for tx in self.transactions:
             try:
@@ -1533,6 +1535,20 @@ class BudgetTracker(QMainWindow):
                 category_totals[category] += amount
                 daily_expense[tx_date.day] += amount
 
+        savings_balance = Decimal("0.00")
+        for tx in self.transactions:
+            if tx["type"] != "savings":
+                continue
+            try:
+                tx_date = date.fromisoformat(tx["date"])
+            except ValueError:
+                continue
+            if tx_date > month_end:
+                continue
+            savings_balance += tx["amount"]
+
+        totals["savings_balance"] = savings_balance
+
         return totals, category_totals, month_transactions, daily_expense
 
     def _update_kpi_cards(
@@ -1544,10 +1560,11 @@ class BudgetTracker(QMainWindow):
     ) -> None:
         if not hasattr(self, "kpi_cards"):
             return
+        savings_display = totals.get("savings_balance", totals["savings"])
         metrics = {
             "income": totals["income"],
             "expense": totals["expense"],
-            "savings": totals["savings"],
+            "savings": savings_display,
             "net": totals["income"] - totals["expense"],
         }
         for key, value in metrics.items():
@@ -1563,7 +1580,13 @@ class BudgetTracker(QMainWindow):
             else:
                 value_label.setStyleSheet("")
             if compare_enabled and prev_totals is not None:
-                previous_value = prev_totals.get(key, Decimal("0.00"))
+                if key == "savings":
+                    previous_value = prev_totals.get(
+                        "savings_balance",
+                        prev_totals.get("savings", Decimal("0.00")),
+                    )
+                else:
+                    previous_value = prev_totals.get(key, Decimal("0.00"))
                 diff = value - previous_value
                 if diff > Decimal("0.00"):
                     arrow, color = "▲", "#81C784"
