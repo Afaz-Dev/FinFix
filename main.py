@@ -8,7 +8,7 @@ from PyQt5.QtCore import Qt, QEvent
 from decimal import Decimal, ROUND_HALF_UP
 from collections import defaultdict
 from datetime import date
-import csv, os, shutil, sys, stat, importlib, json, time
+import csv, os, shutil, sys, stat, importlib, json, time, ctypes
 from pathlib import Path
 
 import requests
@@ -89,7 +89,7 @@ QLabel#Subtitle { color: #B0BEC5; font-size: 11px; background-color: transparent
 QLabel#BalanceValue { background-color: #1E3A29; border-radius: 14px; padding: 8px 14px; font-size: 15px; font-weight: 600; color: #A5D6A7; }
 QFrame#Card { background-color: #1A1A1F; border: 1px solid #2C2C34; border-radius: 16px; }
 QFrame#SummaryBubble { background-color: #1C1C21; border: 1px solid #2C2C34; border-radius: 14px; }
-QLabel#SummaryText { color: #E0E0E0; font-size: 12px; background-color: transparent; }
+QLabel#SummaryText { color: #E0E0E0; font-size: 14px; background-color: transparent; }
 QLabel#SectionTitle { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: #9FA8DA; background-color: transparent; }
 QPushButton#SecondaryButton { background-color: #2A2A33; border: 1px solid #3A3A45; border-radius: 10px; padding: 9px 12px; font-weight: 600; color: #F5F5F5; }
 QPushButton#SecondaryButton:hover { background-color: #353543; }
@@ -110,7 +110,7 @@ QLabel#Subtitle { color: #5F6368; font-size: 11px; background-color: transparent
 QLabel#BalanceValue { background-color: #E8F5E9; border-radius: 14px; padding: 8px 14px; font-size: 15px; font-weight: 600; color: #2E7D32; }
 QFrame#Card { background-color: #FFFFFF; border: 1px solid #E0E0E0; border-radius: 16px; }
 QFrame#SummaryBubble { background-color: #F9F9F9; border: 1px solid #D6D6D6; border-radius: 14px; }
-QLabel#SummaryText { color: #212121; font-size: 12px; background-color: transparent; }
+QLabel#SummaryText { color: #212121; font-size: 14px; background-color: transparent; }
 QLabel#SectionTitle { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: #3949AB; background-color: transparent; }
 QPushButton#SecondaryButton { background-color: #F0F0F0; border: 1px solid #D0D0D0; border-radius: 10px; padding: 9px 12px; font-weight: 600; color: #1F1F1F; }
 QPushButton#SecondaryButton:hover { background-color: #E4E4E4; }
@@ -1533,6 +1533,26 @@ class BudgetTracker(QWidget):
             button_text = "Switch to Dark Mode"
         self.setStyleSheet(stylesheet)
         self.theme_btn.setText(button_text)
+        self.update_titlebar_theme()
+
+    def update_titlebar_theme(self):
+        if os.name != "nt":
+            return
+        try:
+            hwnd = int(self.winId())
+            if hwnd == 0:
+                return
+            dwmapi = ctypes.windll.dwmapi
+            dark_enabled = ctypes.c_int(1 if self.theme_mode == "dark" else 0)
+            # Apply immersive dark mode flag for compatibility across Windows versions
+            for attr in (19, 20):
+                dwmapi.DwmSetWindowAttribute(hwnd, attr, ctypes.byref(dark_enabled), ctypes.sizeof(dark_enabled))
+            caption_color = ctypes.c_uint(0x00281D1D if self.theme_mode == "dark" else 0x00FFFFFF)
+            text_color = ctypes.c_uint(0x00E0E0E0 if self.theme_mode == "dark" else 0x00212121)
+            dwmapi.DwmSetWindowAttribute(hwnd, 35, ctypes.byref(caption_color), ctypes.sizeof(caption_color))
+            dwmapi.DwmSetWindowAttribute(hwnd, 36, ctypes.byref(text_color), ctypes.sizeof(text_color))
+        except Exception:
+            pass
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
