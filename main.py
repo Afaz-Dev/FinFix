@@ -1,7 +1,7 @@
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton,
     QListWidget, QHBoxLayout, QGraphicsDropShadowEffect, QMessageBox,
-    QComboBox, QPlainTextEdit, QFileDialog, QDialog, QFrame, QSplitter, QDialogButtonBox, QWhatsThis, QSizePolicy
+    QComboBox, QPlainTextEdit, QFileDialog, QDialog, QFrame, QSplitter, QDialogButtonBox, QWhatsThis, QSizePolicy, QScrollArea
 )
 from PyQt5.QtGui import QColor, QFont, QDoubleValidator, QHelpEvent
 from PyQt5.QtCore import Qt, QEvent
@@ -572,6 +572,7 @@ class BudgetTracker(QWidget):
 
         self.summary_frame = QFrame()
         self.summary_frame.setObjectName("SummaryBubble")
+        self.summary_frame.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         summary_inner = QVBoxLayout(self.summary_frame)
         summary_inner.setContentsMargins(18, 16, 18, 16)
         summary_inner.setSpacing(10)
@@ -580,15 +581,25 @@ class BudgetTracker(QWidget):
         self.summary_overview_label.setObjectName("SummaryText")
         self.summary_overview_label.setWordWrap(True)
         self.summary_overview_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.summary_overview_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         self.summary_category_label = QLabel("Category breakdown will appear once you log spending.")
         self.summary_category_label.setObjectName("SummaryText")
         self.summary_category_label.setWordWrap(True)
         self.summary_category_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.summary_category_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         summary_inner.addWidget(self.summary_overview_label)
         summary_inner.addWidget(self.summary_category_label)
-        summary_layout.addWidget(self.summary_frame)
+        summary_inner.addStretch(1)
+
+        summary_scroll = QScrollArea()
+        summary_scroll.setWidgetResizable(True)
+        summary_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        summary_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        summary_scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        summary_scroll.setWidget(self.summary_frame)
+        summary_layout.addWidget(summary_scroll, 1)
 
         actions_row = QHBoxLayout()
         actions_row.setSpacing(10)
