@@ -1313,7 +1313,7 @@ class BudgetTracker(QMainWindow):
         except FileNotFoundError:
             return
 
-        today_spend = {cat: self.category_monthly_total(cat) for cat in self.budget_map}
+        today_spend = {cat: self.category_monthly_expense_total(cat) for cat in self.budget_map}
         for category in sorted(self.budget_map.keys()):
             allowance = self.budget_map[category]
             spent = today_spend.get(category, Decimal("0.00"))
@@ -1576,7 +1576,13 @@ class BudgetTracker(QMainWindow):
                 delta_label.setText("--")
                 delta_label.setStyleSheet("")
 
-    def _populate_category_table(self, category_totals: defaultdict, year: int, month: int) -> None:
+    def _populate_category_table(
+        self,
+        category_totals: defaultdict,
+        year: int,
+        month: int,
+        savings_only_categories: set[str] | None = None,
+    ) -> None:
         if not hasattr(self, "category_table"):
             return
         table = self.category_table
@@ -1587,7 +1593,10 @@ class BudgetTracker(QMainWindow):
             return
         for row, category in enumerate(sorted(category_totals.keys(), key=str.lower)):
             spent = category_totals[category]
-            budget = self.budget_map.get(category)
+            is_savings_only = (
+                savings_only_categories is not None and category in savings_only_categories
+            )
+            budget = None if is_savings_only else self.budget_map.get(category)
             variance = (budget - spent) if budget else None
             used_percent = (spent / budget * Decimal("100.00")) if budget and budget != Decimal("0.00") else None
 
@@ -1904,7 +1913,16 @@ class BudgetTracker(QMainWindow):
             prev_totals = None
             prev_label = ""
         self._update_kpi_cards(totals, prev_totals, compare_enabled, prev_label)
-        self._populate_category_table(category_totals, year, month)
+        expense_cats = set()
+        savings_cats = set()
+        for tx, _tx_date in month_transactions:
+            cat = tx.get("category") or ("Savings" if tx.get("type") == "savings" else "General")
+            if tx.get("type") == "expense":
+                expense_cats.add(cat)
+            elif tx.get("type") == "savings":
+                savings_cats.add(cat)
+        savings_only = savings_cats - expense_cats
+        self._populate_category_table(category_totals, year, month, savings_only)
         self._update_alerts(category_totals, month_transactions)
         self._update_sparkline(daily_expense, year, month)
         self._update_forecast(totals, month_transactions, year, month)
@@ -1916,6 +1934,22 @@ class BudgetTracker(QMainWindow):
             if tx["category"] != category:
                 continue
             if tx["type"] not in {"expense", "savings"}:
+                continue
+            try:
+                tx_date = date.fromisoformat(tx["date"])
+            except ValueError:
+                continue
+            if tx_date.year == today.year and tx_date.month == today.month:
+                total += tx["amount"]
+        return total
+
+    def category_monthly_expense_total(self, category: str) -> Decimal:
+        today = date.today()
+        total = Decimal("0.00")
+        for tx in self.transactions:
+            if tx["category"] != category:
+                continue
+            if tx["type"] != "expense":
                 continue
             try:
                 tx_date = date.fromisoformat(tx["date"])
@@ -2534,10 +2568,10 @@ class BudgetTracker(QMainWindow):
         self.update_summary()
         self.clear_inputs()
 
-        if ttype != "income":
+        if ttype == "expense":
             budget = self.budget_map.get(raw_category)
             if budget:
-                spent = self.category_monthly_total(raw_category)
+                spent = self.category_monthly_expense_total(raw_category)
                 if spent > budget:
                     over = spent - budget
                     QMessageBox.warning(
