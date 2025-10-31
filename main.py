@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (
     QGridLayout, QCheckBox, QFormLayout, QInputDialog
 )
 from PyQt5.QtGui import QColor, QFont, QDoubleValidator, QHelpEvent, QKeySequence, QPainter, QDrag
-from PyQt5.QtCore import Qt, QEvent, QPoint, QByteArray, QMimeData
+from PyQt5.QtCore import Qt, QEvent, QPoint, QByteArray, QMimeData, pyqtSignal
 from PyQt5.QtPrintSupport import QPrinter
 from typing import cast
 from decimal import Decimal, ROUND_HALF_UP
@@ -85,6 +85,7 @@ QWidget { background-color: #121212; color: #E0E0E0; font-family: 'Segoe UI'; }
 QLineEdit { background-color: #1E1E1E; border: 2px solid #333333; border-radius: 8px; padding: 6px; color: #E0E0E0; }
 QListWidget { background-color: #1C1C1C; border: 1px solid #333333; border-radius: 8px; font-family: 'Consolas', 'Cascadia Mono', monospace; }
 QListWidget::item { padding: 6px 8px; border-bottom: 1px solid #2C2C34; }
+QListWidget::item:alternate { background-color: #1F1F26; }
 QListWidget::item:last { border-bottom: none; }
 QListWidget::item:selected { background-color: #314261; color: #FFFFFF; }
 QListWidget::item:selected:!active { background-color: #2C3B58; color: #FFFFFF; }
@@ -97,6 +98,7 @@ QLabel#Title { font-size: 18px; font-weight: 600; background-color: transparent;
 QLabel#Subtitle { color: #B0BEC5; font-size: 12px; background-color: transparent; }
 QLabel#BalanceValue { background-color: #1E3A29; border-radius: 14px; padding: 8px 14px; font-size: 14px; font-weight: 600; color: #A5D6A7; }
 QFrame#Card { background-color: #1A1A1F; border: 1px solid #2C2C34; border-radius: 16px; }
+QFrame#ActionBar { background-color: #16161C; border: 1px solid #2C2C34; border-radius: 12px; }
 QFrame#SummaryBubble { background-color: #1C1C21; border: 1px solid #2C2C34; border-radius: 14px; }
 QLabel#SummaryText { color: #E0E0E0; font-size: 12px; background-color: transparent; }
 QLabel#SummaryCaption { color: #CFD8DC; font-size: 12px; background-color: transparent; }
@@ -124,6 +126,7 @@ QWidget { background-color: #F5F5F5; color: #212121; font-family: 'Segoe UI'; }
 QLineEdit { background-color: #FFFFFF; border: 2px solid #D0D0D0; border-radius: 8px; padding: 6px; color: #212121; }
 QListWidget { background-color: #FFFFFF; border: 1px solid #D0D0D0; border-radius: 8px; font-family: 'Consolas', 'Cascadia Mono', monospace; }
 QListWidget::item { padding: 6px 8px; border-bottom: 1px solid #E0E0E0; }
+QListWidget::item:alternate { background-color: #F4F7FF; }
 QListWidget::item:selected { background-color: #CCE0FF; color: #102A43; }
 QListWidget::item:selected:!active { background-color: #D7E6FF; color: #102A43; }
 QListWidget::item:last { border-bottom: none; }
@@ -136,6 +139,7 @@ QLabel#Title { font-size: 18px; font-weight: 600; color: #1B5E20; background-col
 QLabel#Subtitle { color: #5F6368; font-size: 12px; background-color: transparent; }
 QLabel#BalanceValue { background-color: #E8F5E9; border-radius: 14px; padding: 8px 14px; font-size: 14px; font-weight: 600; color: #2E7D32; }
 QFrame#Card { background-color: #FFFFFF; border: 1px solid #E0E0E0; border-radius: 16px; }
+QFrame#ActionBar { background-color: rgba(255, 255, 255, 0.85); border: 1px solid #DADADA; border-radius: 12px; }
 QFrame#SummaryBubble { background-color: #F9F9F9; border: 1px solid #D6D6D6; border-radius: 14px; }
 QLabel#SummaryText { color: #212121; font-size: 12px; background-color: transparent; }
 QLabel#SummaryCaption { color: #455A64; font-size: 12px; background-color: transparent; }
@@ -157,6 +161,14 @@ QPushButton#SecondaryButton { background-color: #F0F0F0; border: 1px solid #D0D0
 QPushButton#SecondaryButton:hover { background-color: #E4E4E4; }
 QLabel#InfoText { color: #5F6368; font-size: 11px; background-color: transparent; }
 """.strip()
+
+class FloatingConverterWindow(QWidget):
+    closed = pyqtSignal()
+
+    def closeEvent(self, event):
+        self.closed.emit()
+        event.ignore()
+        self.hide()
 
 class CardWorkspace(QWidget):
     def __init__(self, columns: int = 2, parent: QWidget | None = None):
@@ -535,7 +547,7 @@ class BudgetTracker(QMainWindow):
         self.last_tx_type = "expense"
         self.show_converter = True
         self.toggle_converter_action: QAction | None = None
-        self.converter_card: QFrame | None = None
+        self.converter_window: FloatingConverterWindow | None = None
         ensure_storage()
         rate_snapshot = load_cached_rates()
         self.exchange_rates = rate_snapshot.get("rates", {"MYR": 1.0})
@@ -678,47 +690,7 @@ class BudgetTracker(QMainWindow):
         self.budget_list.itemDoubleClicked.connect(self.edit_budget_item)
         budget_layout.addWidget(self.budget_list)
 
-        converter_card = QFrame()
-        converter_card.setObjectName("Card")
-        converter_layout = QVBoxLayout(converter_card)
-        converter_layout.setContentsMargins(20, 20, 20, 20)
-        converter_layout.setSpacing(12)
-        converter_header = QLabel("Currency Converter")
-        converter_header.setObjectName("SectionTitle")
-        converter_layout.addWidget(converter_header)
-
-        self.currency_amount_input = QLineEdit()
-        self.currency_amount_input.setPlaceholderText("Amount in MYR")
-        self.currency_amount_input.setValidator(QDoubleValidator(0.00, 1_000_000.0, 2))
-        converter_layout.addWidget(self.currency_amount_input)
-
-        self.currency_target_combo = QComboBox()
-        self.currency_target_combo.setEditable(True)
-        line_edit = self.currency_target_combo.lineEdit()
-        if line_edit is not None:
-            line_edit.setPlaceholderText("Search currency (e.g., USD - US Dollar)")
-        converter_layout.addWidget(self.currency_target_combo)
-
-        converter_buttons = QHBoxLayout()
-        converter_buttons.setSpacing(10)
-        self.currency_convert_btn = QPushButton("Convert")
-        self.currency_convert_btn.setObjectName("SecondaryButton")
-        self.currency_update_btn = QPushButton("Refresh Rates")
-        self.currency_update_btn.setObjectName("SecondaryButton")
-        converter_buttons.addWidget(self.currency_convert_btn)
-        converter_buttons.addWidget(self.currency_update_btn)
-        converter_layout.addLayout(converter_buttons)
-
-        self.currency_result_label = QLabel("Result: -")
-        self.currency_result_label.setWordWrap(True)
-        converter_layout.addWidget(self.currency_result_label)
-
-        self.currency_info_label = QLabel("Rates last updated: -")
-        self.currency_info_label.setObjectName("InfoText")
-        self.currency_info_label.setWordWrap(True)
-        converter_layout.addWidget(self.currency_info_label)
-        self.converter_card = converter_card
-        converter_card.setVisible(self.show_converter)
+        self._build_converter_window()
 
         ledger_card = QFrame()
         ledger_card.setObjectName("Card")
@@ -733,27 +705,28 @@ class BudgetTracker(QMainWindow):
         self.transaction_list.setMinimumHeight(220)
         self.transaction_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.transaction_list.customContextMenuRequested.connect(self.open_transaction_context_menu)
+        self.transaction_list.setSpacing(4)
+        self.transaction_list.setUniformItemSizes(True)
+        self.transaction_list.setAlternatingRowColors(True)
         ledger_layout.addWidget(self.transaction_list)
 
-        reclass_row = QHBoxLayout()
-        reclass_row.setSpacing(10)
-        self.reclass_type_combo = QComboBox()
-        self.reclass_type_combo.addItems(["income", "expense", "savings"])
-        self.reclass_category_input = QLineEdit()
-        self.reclass_category_input.setPlaceholderText("New category (optional)")
-        self.convert_btn = QPushButton("Reclassify Selected Transaction")
-        self.convert_btn.setObjectName("SecondaryButton")
         self.edit_transaction_btn = QPushButton("Edit Transaction")
         self.edit_transaction_btn.setObjectName("SecondaryButton")
         self.delete_btn = QPushButton("Delete Transaction")
         self.delete_btn.setObjectName("SecondaryButton")
-        reclass_row.addWidget(self.reclass_type_combo)
-        reclass_row.addWidget(self.reclass_category_input)
-        reclass_row.addWidget(self.convert_btn)
-        reclass_row.addWidget(self.edit_transaction_btn)
-        reclass_row.addWidget(self.delete_btn)
-        ledger_layout.addLayout(reclass_row)
+        action_bar = QFrame()
+        action_bar.setObjectName("ActionBar")
+        action_layout = QHBoxLayout(action_bar)
+        action_layout.setContentsMargins(14, 10, 14, 10)
+        action_layout.setSpacing(12)
+        action_layout.addStretch(1)
+        action_layout.addWidget(self.edit_transaction_btn)
+        action_layout.addWidget(self.delete_btn)
+        ledger_layout.addWidget(action_bar)
         self.transaction_list.currentRowChanged.connect(self.update_reclass_ui)
+        self.transactions_action_bar = action_bar
+        self.edit_transaction_btn.setEnabled(False)
+        self.delete_btn.setEnabled(False)
 
         self.summary_card = QFrame()
         self.summary_card.setObjectName("Card")
@@ -927,17 +900,17 @@ class BudgetTracker(QMainWindow):
         actions_row.addWidget(self.expense_chart_btn)
         summary_layout.addLayout(actions_row)
 
-        for card in (form_card, budget_card, converter_card, ledger_card, self.summary_card):
+        for card in (form_card, budget_card, ledger_card, self.summary_card):
             card.setMinimumWidth(340)
             card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
 
         self.cards_workspace = CardWorkspace(columns=2)
         self.cards_workspace.add_card(form_card, tx_header)
         self.cards_workspace.add_card(budget_card, budget_header)
-        self.cards_workspace.add_card(converter_card, converter_header)
         self.cards_workspace.add_card(ledger_card, ledger_header)
         self.cards_workspace.add_card(self.summary_card, summary_header)
         self.cards_workspace.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        self.card_frames = [form_card, budget_card, ledger_card, self.summary_card]
 
         self.cards_scroll = QScrollArea()
         self.cards_scroll.setWidgetResizable(True)
@@ -960,7 +933,6 @@ class BudgetTracker(QMainWindow):
         self.expense_chart_btn.clicked.connect(self.show_expense_pie_chart)
         self.currency_convert_btn.clicked.connect(self.perform_currency_conversion)
         self.currency_update_btn.clicked.connect(self.refresh_exchange_rates)
-        self.convert_btn.clicked.connect(self.reclassify_selected_transaction)
         self.edit_transaction_btn.clicked.connect(self.edit_selected_transaction)
         self.delete_btn.clicked.connect(self.delete_selected_transaction)
 
@@ -1018,18 +990,154 @@ class BudgetTracker(QMainWindow):
         QShortcut(QKeySequence("Ctrl+Z"), self, self.undo_last_transaction)
         QShortcut(QKeySequence("Ctrl+E"), self, self.export_monthly_data)
 
+    def _build_converter_window(self):
+        if self.converter_window is not None:
+            return
+        window = FloatingConverterWindow(self)
+        window_type_enum = getattr(Qt, "WindowType", None)
+        if window_type_enum is not None and hasattr(window_type_enum, "Window"):
+            window_flag_obj = window_type_enum.Window
+        else:
+            window_flag_obj = getattr(Qt, "Window", 0x00000001)
+        if isinstance(window_flag_obj, int):
+            window_flag = Qt.WindowType(window_flag_obj)
+        else:
+            window_flag = cast(Qt.WindowType, window_flag_obj)
+        window.setWindowFlag(window_flag, True)
+        window.setWindowModality(Qt.WindowModality.NonModal)
+        window.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, False)
+        window.setObjectName("ConverterWindow")
+        window.setWindowTitle("Currency Converter")
+
+        layout = QVBoxLayout(window)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(12)
+
+        header = QLabel("Currency Converter")
+        header.setObjectName("SectionTitle")
+        layout.addWidget(header)
+
+        self.currency_amount_input = QLineEdit()
+        self.currency_amount_input.setPlaceholderText("Amount in MYR")
+        self.currency_amount_input.setValidator(QDoubleValidator(0.00, 1_000_000.0, 2))
+        layout.addWidget(self.currency_amount_input)
+
+        self.currency_target_combo = QComboBox()
+        self.currency_target_combo.setEditable(True)
+        combo_edit = self.currency_target_combo.lineEdit()
+        if combo_edit is not None:
+            combo_edit.setPlaceholderText("Search currency (e.g., USD - US Dollar)")
+        layout.addWidget(self.currency_target_combo)
+
+        button_row = QHBoxLayout()
+        button_row.setSpacing(10)
+        self.currency_convert_btn = QPushButton("Convert")
+        self.currency_convert_btn.setObjectName("SecondaryButton")
+        self.currency_update_btn = QPushButton("Refresh Rates")
+        self.currency_update_btn.setObjectName("SecondaryButton")
+        button_row.addWidget(self.currency_convert_btn)
+        button_row.addWidget(self.currency_update_btn)
+        layout.addLayout(button_row)
+
+        self.currency_result_label = QLabel("Result: -")
+        self.currency_result_label.setWordWrap(True)
+        layout.addWidget(self.currency_result_label)
+
+        self.currency_info_label = QLabel("Rates last updated: -")
+        self.currency_info_label.setObjectName("InfoText")
+        self.currency_info_label.setWordWrap(True)
+        layout.addWidget(self.currency_info_label)
+
+        window.closed.connect(self._on_converter_window_closed)
+        self.converter_window = window
+        window.adjustSize()
+        self._position_converter_window()
+        if self.show_converter:
+            window.show()
+        else:
+            window.hide()
+
+    def _position_converter_window(self):
+        window = self.converter_window
+        if window is None:
+            return
+        size = window.size()
+        if size.isEmpty():
+            size = window.sizeHint()
+        main_geo = self.frameGeometry()
+        x = main_geo.center().x() - size.width() // 2
+        y = main_geo.top() + 60
+        # Keep window on-screen by clamping to available geometry
+        screen = QApplication.primaryScreen()
+        if screen is not None:
+            available = screen.availableGeometry()
+            x = max(available.left() + 20, min(x, available.right() - size.width() - 20))
+            y = max(available.top() + 20, min(y, available.bottom() - size.height() - 20))
+        window.move(x, y)
+
+    def _on_converter_window_closed(self):
+        self.show_converter = False
+        if self.toggle_converter_action is not None and self.toggle_converter_action.isChecked():
+            self.toggle_converter_action.blockSignals(True)
+            self.toggle_converter_action.setChecked(False)
+            self.toggle_converter_action.blockSignals(False)
+        self.toast("Currency converter hidden.")
+
+    def _refresh_card_shadows(self):
+        frames = getattr(self, "card_frames", [])
+        if not frames:
+            return
+        shadow_strength = 140 if self.theme_mode == "dark" else 80
+        for frame in frames:
+            if frame is None:
+                continue
+            effect = frame.graphicsEffect()
+            if not isinstance(effect, QGraphicsDropShadowEffect):
+                effect = QGraphicsDropShadowEffect(frame)
+            effect.setBlurRadius(28)
+            effect.setOffset(0, 12)
+            effect.setColor(QColor(0, 0, 0, shadow_strength))
+            frame.setGraphicsEffect(effect)
+        action_bar = getattr(self, "transactions_action_bar", None)
+        if isinstance(action_bar, QFrame):
+            effect = action_bar.graphicsEffect()
+            if not isinstance(effect, QGraphicsDropShadowEffect):
+                effect = QGraphicsDropShadowEffect(action_bar)
+            effect.setBlurRadius(18)
+            effect.setOffset(0, 6)
+            effect.setColor(QColor(0, 0, 0, max(shadow_strength - 40, 30)))
+            action_bar.setGraphicsEffect(effect)
+
+    def moveEvent(self, event):
+        super().moveEvent(event)
+        window = self.converter_window
+        if window is not None and window.isVisible():
+            self._position_converter_window()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        window = self.converter_window
+        if window is not None and window.isVisible():
+            self._position_converter_window()
+
     def toggle_currency_converter(self, checked: bool):
         self.show_converter = bool(checked)
         if self.toggle_converter_action is not None and self.toggle_converter_action.isChecked() != self.show_converter:
             self.toggle_converter_action.blockSignals(True)
             self.toggle_converter_action.setChecked(self.show_converter)
             self.toggle_converter_action.blockSignals(False)
-        card = getattr(self, "converter_card", None)
-        if card is None:
+        if self.converter_window is None:
+            self._build_converter_window()
+        window = self.converter_window
+        if window is None:
             return
-        card.setVisible(self.show_converter)
-        if hasattr(self, "cards_workspace"):
-            self.cards_workspace.relayout()
+        if self.show_converter:
+            window.show()
+            window.raise_()
+            window.activateWindow()
+            self._position_converter_window()
+        else:
+            window.hide()
 
     def toast(self, message: str, timeout_ms: int = 4000):
         if hasattr(self, "status_bar"):
@@ -1809,24 +1917,11 @@ class BudgetTracker(QMainWindow):
         return total
 
     def update_reclass_ui(self, row: int):
-        if not hasattr(self, "reclass_type_combo"):
-            return
         has_selection = 0 <= row < len(self.transactions)
         if hasattr(self, "delete_btn"):
             self.delete_btn.setEnabled(has_selection)
         if hasattr(self, "edit_transaction_btn"):
             self.edit_transaction_btn.setEnabled(has_selection)
-        if not has_selection:
-            self.reclass_type_combo.setCurrentIndex(0)
-            self.reclass_category_input.clear()
-            return
-        tx = self.transactions[row]
-        idx = self.reclass_type_combo.findText(tx["type"])
-        if idx >= 0:
-            self.reclass_type_combo.blockSignals(True)
-            self.reclass_type_combo.setCurrentIndex(idx)
-            self.reclass_type_combo.blockSignals(False)
-        self.reclass_category_input.setText(tx["category"] or "")
 
     def open_transaction_context_menu(self, position: QPoint):
         row = self.transaction_list.indexAt(position).row()
@@ -1967,71 +2062,6 @@ class BudgetTracker(QMainWindow):
             QMessageBox.information(self, "Select a transaction", "Choose a transaction to edit.")
             return
         self.edit_transaction(row)
-
-    def reclassify_selected_transaction(self):
-        row = self.transaction_list.currentRow()
-        if row < 0 or row >= len(self.transactions):
-            QMessageBox.information(self, "Select a transaction", "Choose a transaction to reclassify.")
-            return
-
-        tx = self.transactions[row]
-        if not tx["tx_id"]:
-            QMessageBox.warning(
-                self,
-                "Cannot convert",
-                "This transaction does not have an ID and cannot be converted in-place.",
-            )
-            return
-
-        new_type = (self.reclass_type_combo.currentText() or "").strip().lower()
-        if new_type not in {"income", "expense", "savings"}:
-            QMessageBox.warning(self, "Choose a type", "Select a new transaction type from the dropdown.")
-            return
-
-        if new_type == "savings":
-            default_category = tx["category"] if tx["category"] and tx["category"] != "General" else "Savings"
-        elif new_type == "income":
-            default_category = tx["category"] if tx["category"] and tx["category"] not in {"General", "Savings"} else "Income"
-        else:
-            default_category = tx["category"] or "General"
-
-        category_input = self.reclass_category_input.text().strip()
-        category = category_input or default_category
-
-        if new_type == tx["type"] and category == tx["category"]:
-            QMessageBox.information(self, "No changes", "This transaction already matches the requested type and category.")
-            return
-
-        confirm = QMessageBox.question(
-            self,
-            "Confirm reclassification",
-            (
-                f"Convert transaction {tx['tx_id']}?\n"
-                f"Amount: RM {tx['amount']:.2f}\n"
-                f"Original type: {tx['type']}\n"
-                f"Original category: {tx['category'] or 'N/A'}\n"
-                f"New type: {new_type}\n"
-                f"New category: {category}"
-            ),
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No,
-        )
-        if confirm != QMessageBox.Yes:
-            return
-
-        if not self.update_transaction_record(tx["tx_id"], new_type, category):
-            QMessageBox.critical(self, "Update failed", "Could not update the transaction in the ledger file.")
-            return
-
-        self.load_ledger()
-        self.load_budgets()
-        self.refresh_category_options()
-        self.update_balance()
-        self.update_summary()
-        if 0 <= row < self.transaction_list.count():
-            self.transaction_list.setCurrentRow(row)
-        self.reclass_category_input.clear()
-        QMessageBox.information(self, "Updated", "Transaction has been updated.")
 
     def _remove_transaction_by_id(self, tx_id: str) -> bool:
         if not tx_id:
@@ -2434,7 +2464,10 @@ class BudgetTracker(QMainWindow):
         else:
             stylesheet = LIGHT_STYLESHEET
         self.setStyleSheet(stylesheet)
+        if self.converter_window is not None:
+            self.converter_window.setStyleSheet(stylesheet)
         self.update_titlebar_theme()
+        self._refresh_card_shadows()
 
     def update_titlebar_theme(self):
         if os.name != "nt":
