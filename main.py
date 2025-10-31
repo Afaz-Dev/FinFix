@@ -811,9 +811,9 @@ class BudgetTracker(QMainWindow):
         self.summary_category_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         summary_inner.addWidget(self.summary_category_label)
 
-        self.category_table = QTableWidget(0, 5)
+        self.category_table = QTableWidget(0, 4)
         self.category_table.setObjectName("SummaryTable")
-        self.category_table.setHorizontalHeaderLabels(["Category", "Spent", "Budget", "Variance", "Used %"])
+        self.category_table.setHorizontalHeaderLabels(["Category", "Spent", "Budget", "Variance"])
         v_header = self.category_table.verticalHeader()
         if v_header is not None:
             v_header.setVisible(False)
@@ -825,7 +825,7 @@ class BudgetTracker(QMainWindow):
         header = self.category_table.horizontalHeader()
         if header is not None:
             header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-            for col in range(1, 5):
+            for col in range(1, 4):
                 header.setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
         summary_inner.addWidget(self.category_table)
 
@@ -1596,27 +1596,9 @@ class BudgetTracker(QMainWindow):
             table.setItem(row, 3, variance_item)
 
             if used_percent is not None:
-                percent_item = QTableWidgetItem("")
-                percent_item.setData(Qt.ItemDataRole.UserRole, float(used_percent))
-                table.setItem(row, 4, percent_item)
-                progress = QProgressBar()
-                progress.setRange(0, 150)
-                progress.setValue(min(int(used_percent), 150))
-                progress.setFormat(f"{used_percent:.0f}%")
-                if used_percent > 100:
-                    chunk_color = "#E57373"
-                elif used_percent >= 80:
-                    chunk_color = "#FFB74D"
-                else:
-                    chunk_color = "#81C784"
-                progress.setStyleSheet(self._progress_stylesheet(chunk_color))
-                progress.setTextVisible(True)
-                table.setCellWidget(row, 4, progress)
-            else:
-                percent_item = QTableWidgetItem("--")
-                percent_item.setData(Qt.ItemDataRole.UserRole, -1)
-                table.setItem(row, 4, percent_item)
-                table.setCellWidget(row, 4, None)
+                tooltip = f"Used {used_percent:.0f}% of budget"
+                for item in (name_item, spent_item, budget_item, variance_item):
+                    item.setToolTip(tooltip)
 
             if used_percent is not None and used_percent > 100:
                 color = QColor("#E57373")
@@ -1631,7 +1613,7 @@ class BudgetTracker(QMainWindow):
                         item.setForeground(color)
 
         table.setSortingEnabled(True)
-        table.sortItems(4, Qt.SortOrder.DescendingOrder)
+        table.sortItems(1, Qt.SortOrder.DescendingOrder)
 
     def _update_sparkline(self, daily_expense: defaultdict, year: int, month: int) -> None:
         if (
