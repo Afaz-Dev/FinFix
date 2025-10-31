@@ -746,10 +746,13 @@ class BudgetTracker(QMainWindow):
         self.convert_btn.setObjectName("SecondaryButton")
         self.edit_savings_btn = QPushButton("Edit Savings Entry")
         self.edit_savings_btn.setObjectName("SecondaryButton")
+        self.delete_btn = QPushButton("Delete Transaction")
+        self.delete_btn.setObjectName("SecondaryButton")
         reclass_row.addWidget(self.reclass_type_combo)
         reclass_row.addWidget(self.reclass_category_input)
         reclass_row.addWidget(self.convert_btn)
         reclass_row.addWidget(self.edit_savings_btn)
+        reclass_row.addWidget(self.delete_btn)
         ledger_layout.addLayout(reclass_row)
         self.transaction_list.currentRowChanged.connect(self.update_reclass_ui)
 
@@ -960,6 +963,7 @@ class BudgetTracker(QMainWindow):
         self.currency_update_btn.clicked.connect(self.refresh_exchange_rates)
         self.convert_btn.clicked.connect(self.reclassify_selected_transaction)
         self.edit_savings_btn.clicked.connect(self.edit_selected_savings)
+        self.delete_btn.clicked.connect(self.delete_selected_transaction)
 
         self.refresh_currency_options()
         self.apply_theme()
@@ -1128,6 +1132,7 @@ class BudgetTracker(QMainWindow):
             display = f"{tx['date']} | {tx['category']} | {sign} RM{tx['amount']:.2f} | {tx['desc']}  ({tx_id})"
             self.transaction_list.addItem(display)
         self.refresh_period_controls()
+        self.update_reclass_ui(self.transaction_list.currentRow())
 
     def current_month_transactions(
         self,
@@ -1807,7 +1812,15 @@ class BudgetTracker(QMainWindow):
     def update_reclass_ui(self, row: int):
         if not hasattr(self, "reclass_type_combo"):
             return
-        if row < 0 or row >= len(self.transactions):
+        has_selection = 0 <= row < len(self.transactions)
+        if hasattr(self, "delete_btn"):
+            self.delete_btn.setEnabled(has_selection)
+        if hasattr(self, "edit_savings_btn"):
+            savings_enabled = False
+            if has_selection:
+                savings_enabled = self.transactions[row]["type"] == "savings"
+            self.edit_savings_btn.setEnabled(savings_enabled)
+        if not has_selection:
             self.reclass_type_combo.setCurrentIndex(0)
             self.reclass_category_input.clear()
             return
@@ -1824,7 +1837,7 @@ class BudgetTracker(QMainWindow):
         if row < 0 or row >= len(self.transactions):
             return
         menu = QMenu(self)
-        edit_action = menu.addAction("Edit…")
+        edit_action = menu.addAction("Edit...")
         duplicate_action = menu.addAction("Duplicate")
         delete_action = menu.addAction("Delete")
         action = menu.exec_(self.transaction_list.mapToGlobal(position))
@@ -1934,7 +1947,21 @@ class BudgetTracker(QMainWindow):
         self.refresh_category_options()
         self.update_balance()
         self.update_summary()
+        if self.transaction_list.count() > 0:
+            next_row = min(row, self.transaction_list.count() - 1)
+            self.transaction_list.setCurrentRow(next_row)
+        else:
+            self.update_reclass_ui(-1)
         self.toast("Transaction deleted.")
+
+    def delete_selected_transaction(self):
+        if not hasattr(self, "transaction_list"):
+            return
+        row = self.transaction_list.currentRow()
+        if row < 0 or row >= len(self.transactions):
+            QMessageBox.information(self, "Select a transaction", "Choose a transaction to delete.")
+            return
+        self.delete_transaction(row)
 
     def edit_selected_savings(self):
         row = self.transaction_list.currentRow()
