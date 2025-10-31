@@ -377,10 +377,15 @@ class BudgetTracker(QWidget):
 
         title_container = QVBoxLayout()
         title_container.setSpacing(4)
+        raw_user = os.getenv("USERNAME") or os.getenv("USER")
+        welcome_text = f"Welcome, {raw_user}!" if raw_user else "Welcome!"
+        welcome_label = QLabel(welcome_text)
+        welcome_label.setObjectName("Subtitle")
         title_label = QLabel("Student Budget Tracker")
         title_label.setObjectName("Title")
         subtitle = QLabel("Track spending, budgets, and savings with a clear monthly view.")
         subtitle.setObjectName("Subtitle")
+        title_container.addWidget(welcome_label)
         title_container.addWidget(title_label)
         title_container.addWidget(subtitle)
 
