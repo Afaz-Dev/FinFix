@@ -230,7 +230,15 @@ class CardWorkspace(QWidget):
         if card is None:
             event.ignore()
             return
-        pos = event.pos().toPoint()
+        if hasattr(event, "position"):
+            pos_obj = event.position()
+            if hasattr(pos_obj, "toPoint"):
+                pos = pos_obj.toPoint()
+            else:
+                pos = QPoint(int(pos_obj.x()), int(pos_obj.y()))
+        else:
+            pos_obj = event.pos()
+            pos = pos_obj if isinstance(pos_obj, QPoint) else pos_obj.toPoint()
         reordered = [c for c in self._cards if c is not card]
         insert_at = self._index_for_position(pos, reordered)
         reordered.insert(insert_at, card)
