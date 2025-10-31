@@ -586,12 +586,9 @@ class BudgetTracker(QMainWindow):
         self.balance_label = QLabel("Net Position: RM 0.00")
         self.balance_label.setObjectName("BalanceValue")
         self.balance_label.setAlignment(Qt.AlignmentFlag.AlignRight)
-        self.theme_btn = QPushButton("Switch to Light Mode")
-        self.theme_btn.setObjectName("themeButton")
-        self.theme_btn.clicked.connect(self.toggle_theme)
 
         header_actions.addWidget(self.balance_label)
-        header_actions.addWidget(self.theme_btn, alignment=Qt.AlignmentFlag.AlignRight)
+        header_actions.addStretch(1)
 
         header_layout.addLayout(header_actions)
 
@@ -602,9 +599,7 @@ class BudgetTracker(QMainWindow):
         header_wrapper_layout.addWidget(header)
         margins = header_layout.contentsMargins()
         balance_height = self.balance_label.sizeHint().height()
-        theme_height = self.theme_btn.sizeHint().height()
-        actions_spacing = header_actions.spacing()
-        stack_height = balance_height + theme_height + actions_spacing
+        stack_height = balance_height
         header_height = max(
             header.sizeHint().height(),
             stack_height + margins.top() + margins.bottom() + 4,
@@ -748,14 +743,14 @@ class BudgetTracker(QMainWindow):
         self.reclass_category_input.setPlaceholderText("New category (optional)")
         self.convert_btn = QPushButton("Reclassify Selected Transaction")
         self.convert_btn.setObjectName("SecondaryButton")
-        self.edit_savings_btn = QPushButton("Edit Savings Entry")
-        self.edit_savings_btn.setObjectName("SecondaryButton")
+        self.edit_transaction_btn = QPushButton("Edit Transaction")
+        self.edit_transaction_btn.setObjectName("SecondaryButton")
         self.delete_btn = QPushButton("Delete Transaction")
         self.delete_btn.setObjectName("SecondaryButton")
         reclass_row.addWidget(self.reclass_type_combo)
         reclass_row.addWidget(self.reclass_category_input)
         reclass_row.addWidget(self.convert_btn)
-        reclass_row.addWidget(self.edit_savings_btn)
+        reclass_row.addWidget(self.edit_transaction_btn)
         reclass_row.addWidget(self.delete_btn)
         ledger_layout.addLayout(reclass_row)
         self.transaction_list.currentRowChanged.connect(self.update_reclass_ui)
@@ -966,7 +961,7 @@ class BudgetTracker(QMainWindow):
         self.currency_convert_btn.clicked.connect(self.perform_currency_conversion)
         self.currency_update_btn.clicked.connect(self.refresh_exchange_rates)
         self.convert_btn.clicked.connect(self.reclassify_selected_transaction)
-        self.edit_savings_btn.clicked.connect(self.edit_selected_savings)
+        self.edit_transaction_btn.clicked.connect(self.edit_selected_transaction)
         self.delete_btn.clicked.connect(self.delete_selected_transaction)
 
         self.refresh_currency_options()
@@ -1819,11 +1814,8 @@ class BudgetTracker(QMainWindow):
         has_selection = 0 <= row < len(self.transactions)
         if hasattr(self, "delete_btn"):
             self.delete_btn.setEnabled(has_selection)
-        if hasattr(self, "edit_savings_btn"):
-            savings_enabled = False
-            if has_selection:
-                savings_enabled = self.transactions[row]["type"] == "savings"
-            self.edit_savings_btn.setEnabled(savings_enabled)
+        if hasattr(self, "edit_transaction_btn"):
+            self.edit_transaction_btn.setEnabled(has_selection)
         if not has_selection:
             self.reclass_type_combo.setCurrentIndex(0)
             self.reclass_category_input.clear()
@@ -1967,65 +1959,14 @@ class BudgetTracker(QMainWindow):
             return
         self.delete_transaction(row)
 
-    def edit_selected_savings(self):
+    def edit_selected_transaction(self):
+        if not hasattr(self, "transaction_list"):
+            return
         row = self.transaction_list.currentRow()
         if row < 0 or row >= len(self.transactions):
-            QMessageBox.information(self, "Select a transaction", "Choose a savings transaction to edit.")
+            QMessageBox.information(self, "Select a transaction", "Choose a transaction to edit.")
             return
-
-        tx = self.transactions[row]
-        if tx["type"] != "savings":
-            QMessageBox.information(self, "Not a savings entry", "Only savings transactions can be edited with this action.")
-            return
-
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Edit Savings Entry")
-        layout = QVBoxLayout(dialog)
-
-        amount_edit = QLineEdit(f"{tx['amount']:.2f}")
-        amount_edit.setValidator(QDoubleValidator(0.01, 1_000_000.0, 2))
-        layout.addWidget(QLabel("Amount (RM)"))
-        layout.addWidget(amount_edit)
-
-        desc_edit = QLineEdit(tx["desc"])
-        layout.addWidget(QLabel("Description"))
-        layout.addWidget(desc_edit)
-
-        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        layout.addWidget(buttons)
-
-        if dialog.exec_() != QDialog.Accepted:
-            return
-
-        amount_text = amount_edit.text().strip()
-        if not amount_text:
-            QMessageBox.warning(self, "Missing amount", "Enter an amount to continue.")
-            return
-        try:
-            new_amount = money(amount_text)
-            if new_amount <= 0:
-                raise ValueError
-        except Exception:
-            QMessageBox.critical(self, "Invalid amount", "Enter a valid numeric amount, e.g. 50.00")
-            return
-
-        new_desc = desc_edit.text().strip() or "No description"
-
-        if not self.update_transaction_record(tx["tx_id"], new_amount=new_amount, new_desc=new_desc):
-            QMessageBox.critical(self, "Update failed", "Could not update the savings entry in the ledger.")
-            return
-
-        self.load_ledger()
-        self.load_budgets()
-        self.refresh_category_options()
-        self.update_balance()
-        self.update_summary()
-        if 0 <= row < self.transaction_list.count():
-            self.transaction_list.setCurrentRow(row)
-        QMessageBox.information(self, "Savings updated", "Savings entry updated successfully.")
-
+        self.edit_transaction(row)
 
     def reclassify_selected_transaction(self):
         row = self.transaction_list.currentRow()
@@ -2490,12 +2431,9 @@ class BudgetTracker(QMainWindow):
     def apply_theme(self):
         if self.theme_mode == "dark":
             stylesheet = DARK_STYLESHEET
-            button_text = "Switch to Light Mode"
         else:
             stylesheet = LIGHT_STYLESHEET
-            button_text = "Switch to Dark Mode"
         self.setStyleSheet(stylesheet)
-        self.theme_btn.setText(button_text)
         self.update_titlebar_theme()
 
     def update_titlebar_theme(self):
