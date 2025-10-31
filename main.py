@@ -1,14 +1,19 @@
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton,
-    QListWidget, QHBoxLayout, QGraphicsDropShadowEffect, QMessageBox,
-    QComboBox, QPlainTextEdit, QFileDialog, QDialog, QFrame, QSplitter, QDialogButtonBox, QWhatsThis, QSizePolicy, QScrollArea
+    QListWidget, QListWidgetItem, QHBoxLayout, QGraphicsDropShadowEffect, QMessageBox,
+    QComboBox, QPlainTextEdit, QFileDialog, QDialog, QFrame, QDialogButtonBox,
+    QWhatsThis, QSizePolicy, QScrollArea, QMainWindow, QMenuBar, QMenu, QAction, QStatusBar,
+    QTableWidget, QTableWidgetItem, QAbstractItemView, QProgressBar, QHeaderView, QShortcut,
+    QGridLayout, QCheckBox, QFormLayout, QInputDialog
 )
-from PyQt5.QtGui import QColor, QFont, QDoubleValidator, QHelpEvent
-from PyQt5.QtCore import Qt, QEvent
+from PyQt5.QtGui import QColor, QFont, QDoubleValidator, QHelpEvent, QKeySequence, QPainter, QDrag
+from PyQt5.QtCore import Qt, QEvent, QPoint, QByteArray, QMimeData
+from PyQt5.QtPrintSupport import QPrinter
+from typing import cast
 from decimal import Decimal, ROUND_HALF_UP
 from collections import defaultdict
-from datetime import date
-import csv, os, shutil, sys, stat, importlib, json, time, ctypes
+from datetime import date, timedelta
+import csv, os, shutil, sys, stat, importlib, json, time, ctypes, calendar
 from pathlib import Path
 
 import requests
@@ -78,19 +83,33 @@ FALLBACK_NAMES = {
 DARK_STYLESHEET = """
 QWidget { background-color: #121212; color: #E0E0E0; font-family: 'Segoe UI'; }
 QLineEdit { background-color: #1E1E1E; border: 2px solid #333333; border-radius: 8px; padding: 6px; color: #E0E0E0; }
-QListWidget { background-color: #1C1C1C; border: 1px solid #333333; border-radius: 8px; }
+QListWidget { background-color: #1C1C1C; border: 1px solid #333333; border-radius: 8px; font-family: 'Consolas', 'Cascadia Mono', monospace; }
+QListWidget::item { padding: 6px 8px; border-bottom: 1px solid #2C2C34; }
+QListWidget::item:last { border-bottom: none; }
 QPushButton#themeButton { background-color: #323232; border: 1px solid #4A4A4A; border-radius: 8px; padding: 6px 12px; color: #E0E0E0; }
 QPushButton#themeButton:hover { background-color: #3C3C3C; }
 QPlainTextEdit { background-color: #1E1E1E; border: 1px solid #333333; border-radius: 8px; padding: 6px; color: #E0E0E0; }
 QComboBox { background-color: #1E1E1E; border: 2px solid #333333; border-radius: 8px; padding: 6px; color: #E0E0E0; }
 QFrame#HeaderBar { background-color: #1D1D28; border-radius: 18px; }
-QLabel#Title { font-size: 20px; font-weight: 600; background-color: transparent; }
-QLabel#Subtitle { color: #B0BEC5; font-size: 11px; background-color: transparent; }
-QLabel#BalanceValue { background-color: #1E3A29; border-radius: 14px; padding: 8px 14px; font-size: 15px; font-weight: 600; color: #A5D6A7; }
+QLabel#Title { font-size: 18px; font-weight: 600; background-color: transparent; }
+QLabel#Subtitle { color: #B0BEC5; font-size: 12px; background-color: transparent; }
+QLabel#BalanceValue { background-color: #1E3A29; border-radius: 14px; padding: 8px 14px; font-size: 14px; font-weight: 600; color: #A5D6A7; }
 QFrame#Card { background-color: #1A1A1F; border: 1px solid #2C2C34; border-radius: 16px; }
 QFrame#SummaryBubble { background-color: #1C1C21; border: 1px solid #2C2C34; border-radius: 14px; }
-QLabel#SummaryText { color: #E0E0E0; font-size: 14px; background-color: transparent; }
-QLabel#SectionTitle { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: #9FA8DA; background-color: transparent; }
+QLabel#SummaryText { color: #E0E0E0; font-size: 12px; background-color: transparent; }
+QLabel#SummaryCaption { color: #CFD8DC; font-size: 12px; background-color: transparent; }
+QLabel#SectionTitle { font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: #9FA8DA; background-color: transparent; }
+QFrame#SummaryKPI { background-color: #24242E; border: 1px solid #343447; border-radius: 12px; }
+QLabel#SummaryKPIHeader { font-size: 12px; font-weight: 600; color: #9FA8DA; }
+QLabel#SummaryKPIValue { font-size: 18px; font-weight: 700; color: #FFFFFF; }
+QLabel#SummaryKPIDelta { font-size: 12px; color: #B0BEC5; }
+QFrame#SummarySubCard { background-color: #1F1F26; border: 1px solid #2E2E38; border-radius: 12px; }
+QTableWidget#SummaryTable { background-color: #1E1E24; border: 1px solid #2C2C34; border-radius: 10px; gridline-color: #2C2C34; }
+QTableWidget#SummaryTable::item { padding: 6px; font-size: 12px; }
+QTableWidget#SummaryTable QHeaderView::section { background-color: #252532; color: #E0E0E0; font-size: 12px; padding: 6px; border: none; }
+QListWidget#SummaryAlerts { background-color: #1E1E24; border: 1px solid #2C2C34; border-radius: 10px; padding: 6px; font-family: 'Segoe UI'; }
+QListWidget#SummaryAlerts::item { border-bottom: 1px solid #2C2C34; padding: 6px 4px; }
+QListWidget#SummaryAlerts::item:last { border-bottom: none; }
 QPushButton#SecondaryButton { background-color: #2A2A33; border: 1px solid #3A3A45; border-radius: 10px; padding: 9px 12px; font-weight: 600; color: #F5F5F5; }
 QPushButton#SecondaryButton:hover { background-color: #353543; }
 QLabel#InfoText { color: #B0BEC5; font-size: 11px; background-color: transparent; }
@@ -99,23 +118,155 @@ QLabel#InfoText { color: #B0BEC5; font-size: 11px; background-color: transparent
 LIGHT_STYLESHEET = """
 QWidget { background-color: #F5F5F5; color: #212121; font-family: 'Segoe UI'; }
 QLineEdit { background-color: #FFFFFF; border: 2px solid #D0D0D0; border-radius: 8px; padding: 6px; color: #212121; }
-QListWidget { background-color: #FFFFFF; border: 1px solid #D0D0D0; border-radius: 8px; }
+QListWidget { background-color: #FFFFFF; border: 1px solid #D0D0D0; border-radius: 8px; font-family: 'Consolas', 'Cascadia Mono', monospace; }
+QListWidget::item { padding: 6px 8px; border-bottom: 1px solid #E0E0E0; }
+QListWidget::item:last { border-bottom: none; }
 QPushButton#themeButton { background-color: #E0E0E0; border: 1px solid #BDBDBD; border-radius: 8px; padding: 6px 12px; color: #212121; }
 QPushButton#themeButton:hover { background-color: #D5D5D5; }
 QPlainTextEdit { background-color: #FFFFFF; border: 1px solid #D0D0D0; border-radius: 8px; padding: 6px; color: #212121; }
 QComboBox { background-color: #FFFFFF; border: 2px solid #D0D0D0; border-radius: 8px; padding: 6px; color: #212121; }
 QFrame#HeaderBar { background-color: #FFFFFF; border-radius: 18px; border: 1px solid #E0E0E0; }
-QLabel#Title { font-size: 20px; font-weight: 600; color: #1B5E20; background-color: transparent; }
-QLabel#Subtitle { color: #5F6368; font-size: 11px; background-color: transparent; }
-QLabel#BalanceValue { background-color: #E8F5E9; border-radius: 14px; padding: 8px 14px; font-size: 15px; font-weight: 600; color: #2E7D32; }
+QLabel#Title { font-size: 18px; font-weight: 600; color: #1B5E20; background-color: transparent; }
+QLabel#Subtitle { color: #5F6368; font-size: 12px; background-color: transparent; }
+QLabel#BalanceValue { background-color: #E8F5E9; border-radius: 14px; padding: 8px 14px; font-size: 14px; font-weight: 600; color: #2E7D32; }
 QFrame#Card { background-color: #FFFFFF; border: 1px solid #E0E0E0; border-radius: 16px; }
 QFrame#SummaryBubble { background-color: #F9F9F9; border: 1px solid #D6D6D6; border-radius: 14px; }
-QLabel#SummaryText { color: #212121; font-size: 14px; background-color: transparent; }
-QLabel#SectionTitle { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: #3949AB; background-color: transparent; }
+QLabel#SummaryText { color: #212121; font-size: 12px; background-color: transparent; }
+QLabel#SummaryCaption { color: #455A64; font-size: 12px; background-color: transparent; }
+QLabel#SectionTitle { font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: #3949AB; background-color: transparent; }
+QFrame#SummaryKPI { background-color: #FFFFFF; border: 1px solid #DADFE6; border-radius: 12px; }
+QLabel#SummaryKPIHeader { font-size: 12px; font-weight: 600; color: #5F6368; }
+QLabel#SummaryKPIValue { font-size: 18px; font-weight: 700; color: #1B5E20; }
+QLabel#SummaryKPIDelta { font-size: 12px; color: #546E7A; }
+QFrame#SummarySubCard { background-color: #FFFFFF; border: 1px solid #DADFE6; border-radius: 12px; }
+QTableWidget#SummaryTable { background-color: #FFFFFF; border: 1px solid #D6D6D6; border-radius: 10px; gridline-color: #E0E0E0; }
+QTableWidget#SummaryTable::item { padding: 6px; font-size: 12px; }
+QTableWidget#SummaryTable QHeaderView::section { background-color: #ECEFF1; color: #37474F; font-size: 12px; padding: 6px; border: none; }
+QListWidget#SummaryAlerts { background-color: #FFFFFF; border: 1px solid #D6D6D6; border-radius: 10px; padding: 6px; font-family: 'Segoe UI'; }
+QListWidget#SummaryAlerts::item { border-bottom: 1px solid #E0E0E0; padding: 6px 4px; }
+QListWidget#SummaryAlerts::item:last { border-bottom: none; }
 QPushButton#SecondaryButton { background-color: #F0F0F0; border: 1px solid #D0D0D0; border-radius: 10px; padding: 9px 12px; font-weight: 600; color: #1F1F1F; }
 QPushButton#SecondaryButton:hover { background-color: #E4E4E4; }
 QLabel#InfoText { color: #5F6368; font-size: 11px; background-color: transparent; }
 """.strip()
+
+class CardWorkspace(QWidget):
+    def __init__(self, columns: int = 2, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.columns = max(1, columns)
+        self._layout = QGridLayout(self)
+        self._layout.setContentsMargins(0, 0, 0, 0)
+        self._layout.setHorizontalSpacing(16)
+        self._layout.setVerticalSpacing(16)
+        for col in range(self.columns):
+            self._layout.setColumnStretch(col, 1)
+        self._cards: list[QWidget] = []
+        self._handles: dict[QWidget, QWidget] = {}
+        self._drag_start: QPoint | None = None
+        self.setAcceptDrops(True)
+
+    def add_card(self, card: QWidget, handle: QWidget) -> None:
+        self._cards.append(card)
+        self._handles[handle] = card
+        handle.installEventFilter(self)
+        handle.setCursor(Qt.CursorShape.OpenHandCursor)
+        self._layout.addWidget(card, 0, 0)
+        self._rebuild()
+
+    def eventFilter(self, obj, event):
+        card = self._handles.get(obj)
+        if card is None:
+            return super().eventFilter(obj, event)
+        handle_widget = cast(QWidget, obj)
+        if event.type() == QEvent.Type.MouseButtonPress and event.button() == Qt.MouseButton.LeftButton:
+            self._drag_start = event.globalPos()
+            handle_widget.setCursor(Qt.CursorShape.ClosedHandCursor)
+        elif (
+            event.type() == QEvent.Type.MouseMove
+            and event.buttons() & Qt.MouseButton.LeftButton
+            and self._drag_start is not None
+        ):
+            if (event.globalPos() - self._drag_start).manhattanLength() >= QApplication.startDragDistance():
+                drag = QDrag(handle_widget)
+                mime = QMimeData()
+                mime.setData("application/x-card-id", QByteArray(str(id(card)).encode("ascii")))
+                drag.setMimeData(mime)
+                pixmap = card.grab()
+                drag.setPixmap(pixmap)
+                hot_spot = handle_widget.mapTo(card, event.pos())
+                drag.setHotSpot(hot_spot)
+                drag.exec_(Qt.DropAction.MoveAction)
+                handle_widget.setCursor(Qt.CursorShape.OpenHandCursor)
+                self._drag_start = None
+                return True
+        elif event.type() == QEvent.Type.MouseButtonRelease:
+            handle_widget.setCursor(Qt.CursorShape.OpenHandCursor)
+            self._drag_start = None
+        return super().eventFilter(obj, event)
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasFormat("application/x-card-id"):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasFormat("application/x-card-id"):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        if not event.mimeData().hasFormat("application/x-card-id"):
+            event.ignore()
+            return
+        card_id_bytes = bytes(event.mimeData().data("application/x-card-id"))
+        try:
+            card_id = int(card_id_bytes.decode("ascii"))
+        except ValueError:
+            event.ignore()
+            return
+        card = next((c for c in self._cards if id(c) == card_id), None)
+        if card is None:
+            event.ignore()
+            return
+        pos = event.pos().toPoint()
+        reordered = [c for c in self._cards if c is not card]
+        insert_at = self._index_for_position(pos, reordered)
+        reordered.insert(insert_at, card)
+        self._cards = reordered
+        self._rebuild()
+        event.acceptProposedAction()
+
+    def _index_for_position(self, pos: QPoint, ordered: list[QWidget]) -> int:
+        if not ordered:
+            return 0
+        for idx, widget in enumerate(ordered):
+            geom = widget.geometry()
+            if pos.y() < geom.top():
+                return idx
+            if geom.contains(pos):
+                return idx if pos.x() <= geom.center().x() else min(idx + 1, len(ordered))
+            if pos.y() <= geom.bottom():
+                return idx if pos.x() <= geom.center().x() else min(idx + 1, len(ordered))
+        return len(ordered)
+
+    def _rebuild(self) -> None:
+        while self._layout.count():
+            item = self._layout.takeAt(0)
+            if item is None:
+                continue
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(self)
+        for idx, card in enumerate(self._cards):
+            row = idx // self.columns
+            col = idx % self.columns
+            self._layout.addWidget(card, row, col)
+        for col in range(self.columns):
+            self._layout.setColumnStretch(col, 1)
+        self._layout.invalidate()
+        self.updateGeometry()
 
 def money(x) -> Decimal:
     return Decimal(str(x)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
@@ -348,7 +499,7 @@ class HelpAwareDialog(QDialog):
         return super().event(event)
 
 
-class BudgetTracker(QWidget):
+class BudgetTracker(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Student Budget Tracker")
@@ -358,6 +509,8 @@ class BudgetTracker(QWidget):
         self.categories = set()
         self.budget_map = {}
         self.balance = Decimal("0.00")
+        self.undo_stack = []
+        self.last_tx_type = "expense"
         ensure_storage()
         rate_snapshot = load_cached_rates()
         self.exchange_rates = rate_snapshot.get("rates", {"MYR": 1.0})
@@ -365,9 +518,18 @@ class BudgetTracker(QWidget):
         self.rates_timestamp = rate_snapshot.get("timestamp", 0)
         self.selected_currency_code = None
 
-        layout = QVBoxLayout(self)
+        central = QWidget()
+        self.setCentralWidget(central)
+
+        layout = QVBoxLayout(central)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(16)
+
+        self._build_menu()
+        self.status_bar = QStatusBar()
+        self.setStatusBar(self.status_bar)
+        self.status_bar.showMessage("Welcome to FinFix", 4000)
+        self._install_shortcuts()
 
         header = QFrame()
         header.setObjectName("HeaderBar")
@@ -438,10 +600,12 @@ class BudgetTracker(QWidget):
         self.amount_input = QLineEdit()
         self.amount_input.setPlaceholderText("Enter amount (e.g., 50.00)")
         self.amount_input.setValidator(QDoubleValidator(0.01, 1_000_000.0, 2))
+        self.amount_input.returnPressed.connect(self.submit_default_transaction)
         form_layout.addWidget(self.amount_input)
 
         self.desc_input = QLineEdit()
         self.desc_input.setPlaceholderText("Description (e.g., Lunch, Books)")
+        self.desc_input.returnPressed.connect(self.submit_default_transaction)
         form_layout.addWidget(self.desc_input)
 
         self.category_input = QComboBox()
@@ -452,6 +616,7 @@ class BudgetTracker(QWidget):
         line_edit = self.category_input.lineEdit()
         if line_edit is not None:
             line_edit.setPlaceholderText("Category (e.g., Food, Books, Savings)")
+            line_edit.returnPressed.connect(self.submit_default_transaction)
         form_layout.addWidget(self.category_input)
 
         btn_layout = QHBoxLayout()
@@ -489,6 +654,8 @@ class BudgetTracker(QWidget):
 
         self.budget_list = QListWidget()
         self.budget_list.setMinimumHeight(120)
+        self.budget_list.setSpacing(6)
+        self.budget_list.itemDoubleClicked.connect(self.edit_budget_item)
         budget_layout.addWidget(self.budget_list)
 
         converter_card = QFrame()
@@ -496,7 +663,7 @@ class BudgetTracker(QWidget):
         converter_layout = QVBoxLayout(converter_card)
         converter_layout.setContentsMargins(20, 20, 20, 20)
         converter_layout.setSpacing(12)
-        converter_header = QLabel("Currency Converter")
+        converter_header = QLabel("Currency Converter (Optional, online)")
         converter_header.setObjectName("SectionTitle")
         converter_layout.addWidget(converter_header)
 
@@ -542,6 +709,8 @@ class BudgetTracker(QWidget):
 
         self.transaction_list = QListWidget()
         self.transaction_list.setMinimumHeight(220)
+        self.transaction_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.transaction_list.customContextMenuRequested.connect(self.open_transaction_context_menu)
         ledger_layout.addWidget(self.transaction_list)
 
         reclass_row = QHBoxLayout()
@@ -561,45 +730,164 @@ class BudgetTracker(QWidget):
         ledger_layout.addLayout(reclass_row)
         self.transaction_list.currentRowChanged.connect(self.update_reclass_ui)
 
-        summary_card = QFrame()
-        summary_card.setObjectName("Card")
-        summary_layout = QVBoxLayout(summary_card)
+        self.summary_card = QFrame()
+        self.summary_card.setObjectName("Card")
+        summary_layout = QVBoxLayout(self.summary_card)
         summary_layout.setContentsMargins(20, 20, 20, 20)
         summary_layout.setSpacing(12)
         summary_header = QLabel("Monthly Summary")
         summary_header.setObjectName("SectionTitle")
         summary_layout.addWidget(summary_header)
 
+        controls_row = QHBoxLayout()
+        controls_row.setSpacing(10)
+        today = date.today()
+        self.month_combo = QComboBox()
+        for month_index in range(1, 13):
+            name = date(2000, month_index, 1).strftime("%B")
+            self.month_combo.addItem(name, month_index)
+        self.month_combo.setCurrentIndex(today.month - 1)
+        self.month_combo.currentIndexChanged.connect(self.update_summary)
+
+        self.year_combo = QComboBox()
+        for year in range(today.year - 3, today.year + 2):
+            self.year_combo.addItem(str(year))
+        self.year_combo.setCurrentText(str(today.year))
+        self.year_combo.currentIndexChanged.connect(self.update_summary)
+
+        self.compare_checkbox = QCheckBox("Compare with previous month")
+        self.compare_checkbox.stateChanged.connect(lambda _: self.update_summary())
+
+        controls_row.addWidget(QLabel("Month:"))
+        controls_row.addWidget(self.month_combo)
+        controls_row.addWidget(QLabel("Year:"))
+        controls_row.addWidget(self.year_combo)
+        controls_row.addStretch(1)
+        controls_row.addWidget(self.compare_checkbox)
+        summary_layout.addLayout(controls_row)
+
         self.summary_frame = QFrame()
         self.summary_frame.setObjectName("SummaryBubble")
         self.summary_frame.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         summary_inner = QVBoxLayout(self.summary_frame)
         summary_inner.setContentsMargins(18, 16, 18, 16)
-        summary_inner.setSpacing(10)
+        summary_inner.setSpacing(12)
 
         self.summary_overview_label = QLabel("No transactions recorded yet.")
-        self.summary_overview_label.setObjectName("SummaryText")
+        self.summary_overview_label.setObjectName("SummaryCaption")
         self.summary_overview_label.setWordWrap(True)
         self.summary_overview_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        self.summary_overview_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        summary_inner.addWidget(self.summary_overview_label)
+
+        kpi_container = QWidget()
+        kpi_layout = QGridLayout(kpi_container)
+        kpi_layout.setContentsMargins(0, 0, 0, 0)
+        kpi_layout.setHorizontalSpacing(12)
+        kpi_layout.setVerticalSpacing(12)
+        self.kpi_cards = {}
+        for col, (metric_key, metric_label) in enumerate(
+            [("income", "Income"), ("expense", "Spending"), ("savings", "Savings"), ("net", "Net")]
+        ):
+            card = QFrame()
+            card.setObjectName("SummaryKPI")
+            card_layout = QVBoxLayout(card)
+            card_layout.setContentsMargins(16, 14, 16, 14)
+            card_layout.setSpacing(6)
+            title = QLabel(metric_label)
+            title.setObjectName("SummaryKPIHeader")
+            value = QLabel("RM 0.00")
+            value.setObjectName("SummaryKPIValue")
+            delta = QLabel("Delta pending")
+            delta.setObjectName("SummaryKPIDelta")
+            card_layout.addWidget(title)
+            card_layout.addWidget(value)
+            card_layout.addWidget(delta)
+            card_layout.addStretch(1)
+            kpi_layout.addWidget(card, 0, col)
+            self.kpi_cards[metric_key] = {"frame": card, "value": value, "delta": delta}
+        summary_inner.addWidget(kpi_container)
 
         self.summary_category_label = QLabel("Category breakdown will appear once you log spending.")
-        self.summary_category_label.setObjectName("SummaryText")
+        self.summary_category_label.setObjectName("SummaryCaption")
         self.summary_category_label.setWordWrap(True)
         self.summary_category_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        self.summary_category_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-
-        summary_inner.addWidget(self.summary_overview_label)
         summary_inner.addWidget(self.summary_category_label)
-        summary_inner.addStretch(1)
 
-        summary_scroll = QScrollArea()
-        summary_scroll.setWidgetResizable(True)
-        summary_scroll.setFrameShape(QFrame.Shape.NoFrame)
-        summary_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        summary_scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        summary_scroll.setWidget(self.summary_frame)
-        summary_layout.addWidget(summary_scroll, 1)
+        self.category_table = QTableWidget(0, 5)
+        self.category_table.setObjectName("SummaryTable")
+        self.category_table.setHorizontalHeaderLabels(["Category", "Spent", "Budget", "Variance", "Used %"])
+        v_header = self.category_table.verticalHeader()
+        if v_header is not None:
+            v_header.setVisible(False)
+        self.category_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.category_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.category_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.category_table.setAlternatingRowColors(True)
+        self.category_table.setSortingEnabled(True)
+        header = self.category_table.horizontalHeader()
+        if header is not None:
+            header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+            for col in range(1, 5):
+                header.setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
+        summary_inner.addWidget(self.category_table)
+
+        self.forecast_label = QLabel("Forecasts will appear once you log transactions.")
+        self.forecast_label.setObjectName("SummaryCaption")
+        self.forecast_label.setWordWrap(True)
+        summary_inner.addWidget(self.forecast_label)
+
+        bottom_row = QHBoxLayout()
+        bottom_row.setSpacing(12)
+
+        sparkline_frame = QFrame()
+        sparkline_frame.setObjectName("SummarySubCard")
+        sparkline_layout = QVBoxLayout(sparkline_frame)
+        sparkline_layout.setContentsMargins(16, 14, 16, 14)
+        sparkline_layout.setSpacing(8)
+        sparkline_header = QLabel("Daily Spend Sparkline")
+        sparkline_header.setObjectName("SummaryCaption")
+        sparkline_layout.addWidget(sparkline_header)
+        if MATPLOTLIB_AVAILABLE and FigureCanvasQTAgg and Figure:
+            figure_cls = cast(type, Figure)
+            canvas_cls = cast(type, FigureCanvasQTAgg)
+            self.sparkline_fig = figure_cls(figsize=(4.0, 1.4))
+            self.sparkline_ax = self.sparkline_fig.add_subplot(111)
+            self.sparkline_canvas = canvas_cls(self.sparkline_fig)
+            sparkline_layout.addWidget(self.sparkline_canvas)
+        else:
+            self.sparkline_fig = None
+            self.sparkline_ax = None
+            self.sparkline_canvas = None
+            self.sparkline_placeholder = QLabel("Install matplotlib to view spending sparkline.")
+            self.sparkline_placeholder.setObjectName("SummaryText")
+            sparkline_layout.addWidget(self.sparkline_placeholder)
+        bottom_row.addWidget(sparkline_frame, 3)
+
+        self.alerts_frame = QFrame()
+        self.alerts_frame.setObjectName("SummarySubCard")
+        alerts_layout = QVBoxLayout(self.alerts_frame)
+        alerts_layout.setContentsMargins(16, 14, 16, 14)
+        alerts_layout.setSpacing(8)
+        alerts_header = QLabel("Alerts")
+        alerts_header.setObjectName("SummaryCaption")
+        alerts_layout.addWidget(alerts_header)
+        self.alerts_list = QListWidget()
+        self.alerts_list.setObjectName("SummaryAlerts")
+        self.alerts_list.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.alerts_list.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        alerts_layout.addWidget(self.alerts_list)
+        bottom_row.addWidget(self.alerts_frame, 2)
+        self.alerts_frame.hide()
+
+        summary_inner.addLayout(bottom_row)
+
+        self.summary_scroll = QScrollArea()
+        self.summary_scroll.setWidgetResizable(True)
+        self.summary_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.summary_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.summary_scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.summary_scroll.setWidget(self.summary_frame)
+        summary_layout.addWidget(self.summary_scroll, 1)
 
         actions_row = QHBoxLayout()
         actions_row.setSpacing(10)
@@ -614,60 +902,33 @@ class BudgetTracker(QWidget):
         actions_row.addWidget(self.expense_chart_btn)
         summary_layout.addLayout(actions_row)
 
-        left_splitter = QSplitter(Qt.Orientation.Vertical)
-        left_splitter.setChildrenCollapsible(False)
-        left_splitter.setHandleWidth(6)
-        left_splitter.addWidget(form_card)
-        left_splitter.addWidget(budget_card)
-        left_splitter.addWidget(converter_card)
-        left_splitter.setSizes([280, 200, 200])
+        for card in (form_card, budget_card, converter_card, ledger_card, self.summary_card):
+            card.setMinimumWidth(340)
+            card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
 
-        right_splitter = QSplitter(Qt.Orientation.Vertical)
-        right_splitter.setChildrenCollapsible(False)
-        right_splitter.setHandleWidth(6)
-        right_splitter.addWidget(ledger_card)
-        right_splitter.addWidget(summary_card)
-        right_splitter.setSizes([360, 260])
+        self.cards_workspace = CardWorkspace(columns=2)
+        self.cards_workspace.add_card(form_card, tx_header)
+        self.cards_workspace.add_card(budget_card, budget_header)
+        self.cards_workspace.add_card(converter_card, converter_header)
+        self.cards_workspace.add_card(ledger_card, ledger_header)
+        self.cards_workspace.add_card(self.summary_card, summary_header)
+        self.cards_workspace.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
 
-        left_container = QWidget()
-        left_container_layout = QVBoxLayout(left_container)
-        left_container_layout.setContentsMargins(0, 0, 0, 0)
-        left_container_layout.setSpacing(0)
-        left_container_layout.addWidget(left_splitter)
+        self.cards_scroll = QScrollArea()
+        self.cards_scroll.setWidgetResizable(True)
+        self.cards_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.cards_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.cards_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.cards_scroll.setWidget(self.cards_workspace)
 
-        right_container = QWidget()
-        right_container_layout = QVBoxLayout(right_container)
-        right_container_layout.setContentsMargins(0, 0, 0, 0)
-        right_container_layout.setSpacing(0)
-        right_container_layout.addWidget(right_splitter)
+        layout.addWidget(header_wrapper)
+        layout.addWidget(self.cards_scroll, 1)
+        layout.setStretch(0, 0)
+        layout.setStretch(1, 1)
 
-        content_splitter = QSplitter(Qt.Orientation.Horizontal)
-        content_splitter.setChildrenCollapsible(False)
-        content_splitter.setHandleWidth(6)
-        content_splitter.addWidget(left_container)
-        content_splitter.addWidget(right_container)
-        content_splitter.setSizes([520, 520])
-
-        content_wrapper = QWidget()
-        content_wrapper_layout = QVBoxLayout(content_wrapper)
-        content_wrapper_layout.setContentsMargins(0, 0, 0, 0)
-        content_wrapper_layout.setSpacing(0)
-        content_wrapper_layout.addWidget(content_splitter)
-
-        main_splitter = QSplitter(Qt.Orientation.Vertical)
-        main_splitter.setChildrenCollapsible(False)
-        main_splitter.setHandleWidth(6)
-        main_splitter.addWidget(header_wrapper)
-        main_splitter.addWidget(content_wrapper)
-        main_splitter.setStretchFactor(0, 0)
-        main_splitter.setStretchFactor(1, 1)
-        main_splitter.setSizes([header_height, max(header_height, 720)])
-
-        layout.addWidget(main_splitter)
-
-        self.income_btn.clicked.connect(lambda: self.add_tx("income"))
-        self.expense_btn.clicked.connect(lambda: self.add_tx("expense"))
-        self.savings_btn.clicked.connect(lambda: self.add_tx("savings"))
+        self.income_btn.clicked.connect(lambda: self.handle_add_tx("income"))
+        self.expense_btn.clicked.connect(lambda: self.handle_add_tx("expense"))
+        self.savings_btn.clicked.connect(lambda: self.handle_add_tx("savings"))
         self.add_budget_btn.clicked.connect(self.add_budget)
         self.export_btn.clicked.connect(self.export_monthly_data)
         self.chart_btn.clicked.connect(self.show_savings_visual)
@@ -685,6 +946,52 @@ class BudgetTracker(QWidget):
         self.update_balance()
         self.update_summary()
 
+    def _build_menu(self):
+        menu_bar = self.menuBar()
+        if menu_bar is None:
+            menu_bar = QMenuBar(self)
+            self.setMenuBar(menu_bar)
+        menu_bar.clear()
+
+        file_menu = menu_bar.addMenu("&File")
+        if file_menu is not None:
+            export_csv_action = QAction("Export Monthly CSV", self)
+            export_csv_action.triggered.connect(self.export_monthly_data)
+            file_menu.addAction(export_csv_action)
+
+            export_png_action = QAction("Export Summary as PNG", self)
+            export_png_action.triggered.connect(self.export_summary_as_png)
+            file_menu.addAction(export_png_action)
+
+            export_pdf_action = QAction("Export Summary as PDF", self)
+            export_pdf_action.triggered.connect(self.export_summary_as_pdf)
+            file_menu.addAction(export_pdf_action)
+
+            file_menu.addSeparator()
+            exit_action = QAction("Exit", self)
+            exit_action.triggered.connect(self.handle_exit)
+            file_menu.addAction(exit_action)
+
+        view_menu = menu_bar.addMenu("&View")
+        if view_menu is not None:
+            toggle_theme_action = QAction("Toggle Light/Dark Mode", self)
+            toggle_theme_action.setShortcut(QKeySequence("Ctrl+T"))
+            toggle_theme_action.triggered.connect(self.toggle_theme)
+            view_menu.addAction(toggle_theme_action)
+
+    def _install_shortcuts(self):
+        QShortcut(QKeySequence("Return"), self, self.submit_default_transaction)
+        QShortcut(QKeySequence("Enter"), self, self.submit_default_transaction)
+        QShortcut(QKeySequence("Ctrl+Z"), self, self.undo_last_transaction)
+        QShortcut(QKeySequence("Ctrl+E"), self, self.export_monthly_data)
+
+    def toast(self, message: str, timeout_ms: int = 4000):
+        if hasattr(self, "status_bar"):
+            self.status_bar.showMessage(message, timeout_ms)
+
+    def handle_exit(self):
+        self.close()
+
     def createGradientButton(self, text, color1, color2):
         btn = QPushButton(text)
         btn.setStyleSheet(f"""
@@ -699,6 +1006,26 @@ class BudgetTracker(QWidget):
         shadow.setColor(QColor(0,0,0,160)); shadow.setOffset(0,3)
         btn.setGraphicsEffect(shadow)
         return btn
+
+    def _progress_stylesheet(self, chunk_color: str, disabled: bool = False) -> str:
+        dark = self.theme_mode == "dark"
+        track_color = "#1C1C23" if dark else "#F3F5F9"
+        border_color = "#30303C" if dark else "#D3D7E0"
+        text_color = "#A0A7B5" if disabled else ("#E0E0E0" if dark else "#212121")
+        chunk = "#3E414D" if disabled else chunk_color
+        return (
+            "QProgressBar {"
+            f" background-color: {track_color};"
+            f" border: 1px solid {border_color};"
+            " border-radius: 8px;"
+            " text-align: center;"
+            f" color: {text_color};"
+            "}"
+            "QProgressBar::chunk {"
+            f" background-color: {chunk};"
+            " border-radius: 8px;"
+            "}"
+        )
 
     def _normalize_transaction(self, row: dict) -> dict:
         tx_id = row.get("tx_id", "").strip()
@@ -757,16 +1084,27 @@ class BudgetTracker(QWidget):
             tx_id = tx["tx_id"] or "-"
             display = f"{tx['date']} | {tx['category']} | {sign} RM{tx['amount']:.2f} | {tx['desc']}  ({tx_id})"
             self.transaction_list.addItem(display)
+        self.refresh_period_controls()
 
-    def current_month_transactions(self, type_filter: str | None = None) -> list[dict]:
-        today = date.today()
+    def current_month_transactions(
+        self,
+        type_filter: str | None = None,
+        year: int | None = None,
+        month: int | None = None,
+    ) -> list[dict]:
+        if year is None or month is None:
+            selected_year, selected_month = self._selected_period()
+            if year is None:
+                year = selected_year
+            if month is None:
+                month = selected_month
         matches: list[dict] = []
         for tx in self.transactions:
             try:
                 tx_date = date.fromisoformat(tx["date"])
             except ValueError:
                 continue
-            if tx_date.year != today.year or tx_date.month != today.month:
+            if tx_date.year != year or tx_date.month != month:
                 continue
             if type_filter and tx["type"] != type_filter:
                 continue
@@ -797,7 +1135,65 @@ class BudgetTracker(QWidget):
         for category in sorted(self.budget_map.keys()):
             allowance = self.budget_map[category]
             spent = today_spend.get(category, Decimal("0.00"))
-            self.budget_list.addItem(f"{category}: RM {spent:.2f} spent / RM {allowance:.2f} budget")
+            used_percent = (spent / allowance * Decimal("100.00")) if allowance > 0 else Decimal("0.00")
+            item = QListWidgetItem()
+            item.setData(Qt.ItemDataRole.UserRole, category)
+            widget = QWidget()
+            widget_layout = QVBoxLayout(widget)
+            widget_layout.setContentsMargins(12, 8, 12, 8)
+            widget_layout.setSpacing(4)
+            title = QLabel(category)
+            title.setObjectName("SummaryCaption")
+            detail = QLabel(f"RM {spent:.2f} of RM {allowance:.2f}")
+            detail.setObjectName("SummaryText")
+            progress = QProgressBar()
+            progress.setRange(0, 150)
+            progress.setValue(min(int(used_percent) if allowance > 0 else 0, 150))
+            progress.setFormat(f"{used_percent:.0f}%" if allowance > 0 else "N/A")
+            if allowance == 0:
+                progress.setEnabled(False)
+                chunk_color = "#4F525E"
+            elif used_percent > 100:
+                chunk_color = "#E57373"
+            elif used_percent >= 80:
+                chunk_color = "#FFB74D"
+            else:
+                chunk_color = "#64B5F6"
+            progress.setStyleSheet(self._progress_stylesheet(chunk_color, allowance == 0))
+            widget_layout.addWidget(title)
+            widget_layout.addWidget(detail)
+            widget_layout.addWidget(progress)
+            item.setSizeHint(widget.sizeHint())
+            self.budget_list.addItem(item)
+            self.budget_list.setItemWidget(item, widget)
+
+    def edit_budget_item(self, item: QListWidgetItem):
+        if item is None:
+            return
+        category = item.data(Qt.ItemDataRole.UserRole)
+        if not category:
+            return
+        current_amount = self.budget_map.get(category, Decimal("0.00"))
+        text, ok = QInputDialog.getText(
+            self,
+            "Edit Budget",
+            f"Monthly budget for {category}",
+            text=f"{current_amount:.2f}",
+        )
+        if not ok:
+            return
+        try:
+            amount = money(text.strip())
+            if amount < 0:
+                raise ValueError
+        except Exception:
+            QMessageBox.warning(self, "Invalid amount", "Enter a valid budget amount, e.g. 250.00")
+            return
+        self.budget_map[category] = amount
+        self.save_budgets()
+        self.load_budgets()
+        self.update_summary()
+        self.toast(f"{category} budget updated.")
 
     def save_budgets(self):
         ensure_writable(BUDGET_CSV)
@@ -880,6 +1276,301 @@ class BudgetTracker(QWidget):
             line_edit.selectAll()
         self.update_rates_info_label()
 
+    def refresh_period_controls(self):
+        if not hasattr(self, "year_combo"):
+            return
+        years = set()
+        for tx in self.transactions:
+            try:
+                years.add(date.fromisoformat(tx["date"]).year)
+            except ValueError:
+                continue
+        if not years:
+            years = {date.today().year}
+        years = sorted(years)
+        current_year_text = self.year_combo.currentText()
+        current_year = int(current_year_text) if current_year_text.isdigit() else years[-1]
+        self.year_combo.blockSignals(True)
+        self.year_combo.clear()
+        for yr in years:
+            self.year_combo.addItem(str(yr))
+        if current_year in years:
+            self.year_combo.setCurrentText(str(current_year))
+        else:
+            self.year_combo.setCurrentText(str(years[-1]))
+        self.year_combo.blockSignals(False)
+
+    def _selected_period(self) -> tuple[int, int]:
+        today = date.today()
+        month = today.month
+        year = today.year
+        if hasattr(self, "month_combo"):
+            data = self.month_combo.currentData()
+            month = int(data) if data else month
+        if hasattr(self, "year_combo"):
+            text = self.year_combo.currentText()
+            if text.isdigit():
+                year = int(text)
+        return year, month
+
+    @staticmethod
+    def _previous_period(year: int, month: int) -> tuple[int, int]:
+        if month == 1:
+            return year - 1, 12
+        return year, month - 1
+
+    def _aggregate_month(self, year: int, month: int):
+        totals = {
+            "income": Decimal("0.00"),
+            "expense": Decimal("0.00"),
+            "savings": Decimal("0.00"),
+        }
+        category_totals: defaultdict[str, Decimal] = defaultdict(lambda: Decimal("0.00"))
+        daily_expense: defaultdict[int, Decimal] = defaultdict(lambda: Decimal("0.00"))
+        month_transactions: list[tuple[dict, date]] = []
+
+        for tx in self.transactions:
+            try:
+                tx_date = date.fromisoformat(tx["date"])
+            except ValueError:
+                continue
+            if tx_date.year != year or tx_date.month != month:
+                continue
+            month_transactions.append((tx, tx_date))
+            amount = tx["amount"]
+            ttype = tx["type"]
+            category = tx["category"] or "Uncategorised"
+            if ttype == "income":
+                totals["income"] += amount
+            elif ttype == "savings":
+                totals["savings"] += amount
+                category_totals[category] += amount
+            else:
+                totals["expense"] += amount
+                category_totals[category] += amount
+                daily_expense[tx_date.day] += amount
+
+        return totals, category_totals, month_transactions, daily_expense
+
+    def _update_kpi_cards(
+        self,
+        totals: dict,
+        prev_totals: dict | None,
+        compare_enabled: bool,
+        prev_month_label: str,
+    ) -> None:
+        if not hasattr(self, "kpi_cards"):
+            return
+        metrics = {
+            "income": totals["income"],
+            "expense": totals["expense"],
+            "savings": totals["savings"],
+            "net": totals["income"] - totals["expense"] - totals["savings"],
+        }
+        for key, value in metrics.items():
+            card = self.kpi_cards.get(key)
+            if not card:
+                continue
+            value_label: QLabel = card["value"]
+            delta_label: QLabel = card["delta"]
+            value_label.setText(f"RM {value:.2f}")
+            if key == "net":
+                net_color = "#81C784" if value >= 0 else "#E57373"
+                value_label.setStyleSheet(f"color: {net_color};")
+            else:
+                value_label.setStyleSheet("")
+            if compare_enabled and prev_totals is not None:
+                previous_value = prev_totals.get(key, Decimal("0.00"))
+                diff = value - previous_value
+                if diff > Decimal("0.00"):
+                    arrow, color = "▲", "#81C784"
+                elif diff < Decimal("0.00"):
+                    arrow, color = "▼", "#E57373"
+                else:
+                    arrow, color = "■", "#B0BEC5"
+                delta_label.setText(f"{arrow} RM {abs(diff):.2f} vs {prev_month_label}")
+                delta_label.setStyleSheet(f"color: {color};")
+            else:
+                delta_label.setText("--")
+                delta_label.setStyleSheet("")
+
+    def _populate_category_table(self, category_totals: defaultdict, year: int, month: int) -> None:
+        if not hasattr(self, "category_table"):
+            return
+        table = self.category_table
+        table.setSortingEnabled(False)
+        table.setRowCount(0)
+        if not category_totals:
+            table.setSortingEnabled(True)
+            return
+        for row, category in enumerate(sorted(category_totals.keys(), key=str.lower)):
+            spent = category_totals[category]
+            budget = self.budget_map.get(category)
+            variance = (budget - spent) if budget else None
+            used_percent = (spent / budget * Decimal("100.00")) if budget and budget != Decimal("0.00") else None
+
+            table.insertRow(row)
+            name_item = QTableWidgetItem(category)
+            name_item.setData(Qt.ItemDataRole.UserRole, category.lower())
+            table.setItem(row, 0, name_item)
+
+            spent_item = QTableWidgetItem(f"RM {spent:.2f}")
+            spent_item.setData(Qt.ItemDataRole.UserRole, float(spent))
+            table.setItem(row, 1, spent_item)
+
+            if budget:
+                budget_item = QTableWidgetItem(f"RM {budget:.2f}")
+                budget_item.setData(Qt.ItemDataRole.UserRole, float(budget))
+            else:
+                budget_item = QTableWidgetItem("--")
+                budget_item.setData(Qt.ItemDataRole.UserRole, -1)
+            table.setItem(row, 2, budget_item)
+
+            if variance is not None:
+                variance_item = QTableWidgetItem(f"RM {variance:.2f}")
+                variance_item.setData(Qt.ItemDataRole.UserRole, float(variance))
+            else:
+                variance_item = QTableWidgetItem("--")
+                variance_item.setData(Qt.ItemDataRole.UserRole, -1)
+            table.setItem(row, 3, variance_item)
+
+            if used_percent is not None:
+                percent_item = QTableWidgetItem(f"{used_percent:.0f}%")
+                percent_item.setData(Qt.ItemDataRole.UserRole, float(used_percent))
+                table.setItem(row, 4, percent_item)
+                progress = QProgressBar()
+                progress.setRange(0, 150)
+                progress.setValue(min(int(used_percent), 150))
+                progress.setFormat(f"{used_percent:.0f}%")
+                if used_percent > 100:
+                    chunk_color = "#E57373"
+                elif used_percent >= 80:
+                    chunk_color = "#FFB74D"
+                else:
+                    chunk_color = "#81C784"
+                progress.setStyleSheet(self._progress_stylesheet(chunk_color))
+                progress.setTextVisible(True)
+                table.setCellWidget(row, 4, progress)
+            else:
+                percent_item = QTableWidgetItem("--")
+                percent_item.setData(Qt.ItemDataRole.UserRole, -1)
+                table.setItem(row, 4, percent_item)
+                table.setCellWidget(row, 4, None)
+
+            if used_percent is not None and used_percent > 100:
+                color = QColor("#E57373")
+            elif used_percent is not None and used_percent >= 80:
+                color = QColor("#FFB74D")
+            else:
+                color = None
+            if color:
+                for col in range(4):
+                    item = table.item(row, col)
+                    if item is not None:
+                        item.setForeground(color)
+
+        table.setSortingEnabled(True)
+        table.sortItems(4, Qt.SortOrder.DescendingOrder)
+
+    def _update_sparkline(self, daily_expense: defaultdict, year: int, month: int) -> None:
+        if (
+            not MATPLOTLIB_AVAILABLE
+            or not hasattr(self, "sparkline_canvas")
+            or self.sparkline_canvas is None
+            or self.sparkline_fig is None
+        ):
+            if hasattr(self, "sparkline_placeholder"):
+                self.sparkline_placeholder.setText("Install matplotlib to view spending sparkline.")
+            return
+        days_in_month = calendar.monthrange(year, month)[1]
+        cumulative = []
+        running = Decimal("0.00")
+        x_values = []
+        for day in range(1, days_in_month + 1):
+            running += daily_expense.get(day, Decimal("0.00"))
+            cumulative.append(float(running))
+            x_values.append(day)
+        fig = self.sparkline_fig
+        canvas = self.sparkline_canvas
+        if fig is None or canvas is None or not hasattr(fig, "add_subplot"):
+            return
+        fig.clear()
+        ax = fig.add_subplot(111)
+        self.sparkline_ax = ax
+        line_color = "#4CAF50" if self.theme_mode == "light" else "#81C784"
+        ax.plot(x_values, cumulative, color=line_color, linewidth=2.2)
+        ax.fill_between(x_values, cumulative, color=line_color, alpha=0.15)
+        ax.set_xlim(1, max(1, days_in_month))
+        max_value = max(cumulative) if cumulative else 0
+        ax.set_ylim(bottom=0, top=max(1, max_value * 1.1 if max_value else 1))
+        ax.set_xticks([])
+        ax.set_yticks([])
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+        ax.set_facecolor("none")
+        fig.patch.set_facecolor("none")
+        canvas.draw_idle()
+
+    def _update_alerts(self, category_totals: defaultdict, month_transactions: list[tuple[dict, date]]) -> None:
+        if not hasattr(self, "alerts_frame") or self.alerts_frame is None or self.alerts_list is None:
+            return
+        alerts: list[str] = []
+        for category, spent in category_totals.items():
+            budget = self.budget_map.get(category)
+            if budget and spent > budget:
+                over = spent - budget
+                alerts.append(f"{category} over budget by RM {over:.2f}")
+        today = date.today()
+        for tx, tx_date in month_transactions:
+            category = (tx["category"] or "").lower()
+            desc = (tx["desc"] or "").lower()
+            if "subscription" in category or "subscription" in desc or "due" in desc:
+                next_due = tx_date + timedelta(days=30)
+                days_until = (next_due - today).days
+                if 0 <= days_until <= 3:
+                    alerts.append(
+                        f"{tx['category'] or 'Subscription'} billing due in {days_until} day(s) ({tx['desc']})"
+                    )
+        unique_alerts = []
+        seen = set()
+        for alert in alerts:
+            if alert not in seen:
+                seen.add(alert)
+                unique_alerts.append(alert)
+        self.alerts_list.clear()
+        if unique_alerts:
+            for alert in unique_alerts:
+                self.alerts_list.addItem(f"- {alert}")
+            self.alerts_frame.show()
+        else:
+            self.alerts_frame.hide()
+
+    def _update_forecast(self, totals: dict, month_transactions: list[tuple[dict, date]], year: int, month: int) -> None:
+        if not hasattr(self, "forecast_label"):
+            return
+        today = date.today()
+        if year != today.year or month != today.month:
+            self.forecast_label.setText("Forecasts shown for the current month only.")
+            return
+        days_in_month = Decimal(calendar.monthrange(year, month)[1])
+        if not month_transactions:
+            self.forecast_label.setText("Forecast month-end: RM 0.00 | Safe-to-spend today: RM 0.00")
+            return
+        days_elapsed = Decimal(today.day)
+        days_remaining = max(Decimal("0.00"), days_in_month - days_elapsed)
+        expense = totals["expense"]
+        savings = totals["savings"]
+        income = totals["income"]
+        daily_burn = expense / days_elapsed if days_elapsed > 0 else Decimal("0.00")
+        projected_spend = expense + (daily_burn * days_remaining)
+        net_forecast = income - savings - projected_spend
+        if days_remaining > 0:
+            safe_to_spend = (income - savings - expense) / days_remaining
+        else:
+            safe_to_spend = income - savings - expense
+        self.forecast_label.setText(
+            f"Forecast month-end: RM {net_forecast:.2f} | Safe-to-spend today: RM {safe_to_spend:.2f}"
+        )
     def update_rates_info_label(self):
         if not hasattr(self, "currency_info_label"):
             return
@@ -1021,76 +1712,38 @@ class BudgetTracker(QWidget):
     def update_summary(self):
         if not hasattr(self, "summary_overview_label"):
             return
-        self.summary_overview_label.setStyleSheet("")
-        self.summary_category_label.setStyleSheet("")
-        if not self.transactions:
-            self.summary_overview_label.setText("No transactions recorded yet.")
-            self.summary_category_label.setText("Category breakdown will appear once you log spending.")
-            return
-
-        today = date.today()
-        totals = defaultdict(lambda: Decimal("0.00"))
-        category_totals = defaultdict(lambda: Decimal("0.00"))
-
-        for tx in self.transactions:
-            try:
-                tx_date = date.fromisoformat(tx["date"])
-            except ValueError:
-                continue
-            if tx_date.year == today.year and tx_date.month == today.month:
-                amount = tx["amount"]
-                ttype = tx["type"]
-                if ttype == "income":
-                    totals["income"] += amount
-                elif ttype == "savings":
-                    totals["savings"] += amount
-                    category_totals[tx["category"]] += amount
-                else:
-                    totals["expense"] += amount
-                    category_totals[tx["category"]] += amount
-
-        if not any(totals.values()) and not category_totals:
-            self.summary_overview_label.setText("No transactions recorded yet for this month.")
-            self.summary_category_label.setText("Category breakdown will appear once you log spending.")
-            return
-
-        net = totals["income"] - totals["expense"] - totals["savings"]
-        overview_lines = [
-            f"<b>Month:</b> {today.strftime('%B %Y')}",
-            f"<b>Total Income:</b> RM {totals['income']:.2f}",
-            f"<b>Total Spending:</b> RM {totals['expense']:.2f}",
-            f"<b>Total Savings:</b> RM {totals['savings']:.2f}",
-            f"<b>Net Position:</b> RM {net:.2f}",
-        ]
-        self.summary_overview_label.setText("<br>".join(overview_lines))
+        year, month = self._selected_period()
+        month_date = date(year, month, 1)
+        month_label = month_date.strftime("%B %Y")
+        totals, category_totals, month_transactions, daily_expense = self._aggregate_month(year, month)
+        transaction_count = len(month_transactions)
+        net_value = totals["income"] - totals["expense"] - totals["savings"]
+        overview_text = (
+            f"<b>{month_label}</b> &bull; {transaction_count} transaction{'s' if transaction_count != 1 else ''} "
+            f"&bull; Net RM {net_value:.2f}"
+        )
+        self.summary_overview_label.setText(overview_text)
 
         if category_totals:
-            category_lines = []
-            over_budget = False
-            for category in sorted(category_totals.keys()):
-                spent = category_totals[category]
-                budget = self.budget_map.get(category)
-                if budget:
-                    variance = budget - spent
-                    status = "within budget" if spent <= budget else "over budget"
-                    if spent > budget:
-                        over_budget = True
-                    category_lines.append(
-                        f"&#8226; <b>{category}:</b> RM {spent:.2f} / RM {budget:.2f} "
-                        f"({status}, variance RM {variance:.2f})"
-                    )
-                else:
-                    category_lines.append(f"&#8226; <b>{category}:</b> RM {spent:.2f} (no budget set)")
-            category_html = "<b>Category breakdown:</b><br>" + "<br>".join(category_lines)
+            self.summary_category_label.setText(
+                f"Category breakdown for {month_date.strftime('%B')} ({len(category_totals)} categories)"
+            )
         else:
-            over_budget = False
-            category_html = "<b>Category breakdown:</b><br>No category spending recorded this month."
-        self.summary_category_label.setText(category_html)
+            self.summary_category_label.setText("Category breakdown will appear once you log spending.")
 
-        status_color = "#E57373" if over_budget else "#81C784"
-        style = f"color: {status_color}; background-color: transparent;"
-        self.summary_overview_label.setStyleSheet(style)
-        self.summary_category_label.setStyleSheet(style)
+        compare_enabled = hasattr(self, "compare_checkbox") and self.compare_checkbox.isChecked()
+        if compare_enabled:
+            prev_year, prev_month = self._previous_period(year, month)
+            prev_totals, _, _, _ = self._aggregate_month(prev_year, prev_month)
+            prev_label = date(prev_year, prev_month, 1).strftime("%b")
+        else:
+            prev_totals = None
+            prev_label = ""
+        self._update_kpi_cards(totals, prev_totals, compare_enabled, prev_label)
+        self._populate_category_table(category_totals, year, month)
+        self._update_alerts(category_totals, month_transactions)
+        self._update_sparkline(daily_expense, year, month)
+        self._update_forecast(totals, month_transactions, year, month)
 
     def category_monthly_total(self, category: str) -> Decimal:
         today = date.today()
@@ -1122,6 +1775,123 @@ class BudgetTracker(QWidget):
             self.reclass_type_combo.setCurrentIndex(idx)
             self.reclass_type_combo.blockSignals(False)
         self.reclass_category_input.setText(tx["category"] or "")
+
+    def open_transaction_context_menu(self, position: QPoint):
+        row = self.transaction_list.indexAt(position).row()
+        if row < 0 or row >= len(self.transactions):
+            return
+        menu = QMenu(self)
+        edit_action = menu.addAction("Edit…")
+        duplicate_action = menu.addAction("Duplicate")
+        delete_action = menu.addAction("Delete")
+        action = menu.exec_(self.transaction_list.mapToGlobal(position))
+        if action == edit_action:
+            self.edit_transaction(row)
+        elif action == duplicate_action:
+            self.duplicate_transaction(row)
+        elif action == delete_action:
+            self.delete_transaction(row)
+
+    def edit_transaction(self, row: int):
+        if row < 0 or row >= len(self.transactions):
+            return
+        tx = self.transactions[row]
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Edit Transaction")
+        layout = QVBoxLayout(dialog)
+
+        form = QFormLayout()
+        type_combo = QComboBox()
+        type_combo.addItems(["income", "expense", "savings"])
+        current_index = type_combo.findText(tx["type"])
+        if current_index >= 0:
+            type_combo.setCurrentIndex(current_index)
+
+        amount_edit = QLineEdit(f"{tx['amount']:.2f}")
+        amount_edit.setValidator(QDoubleValidator(0.01, 1_000_000.0, 2))
+        category_edit = QLineEdit(tx["category"])
+        desc_edit = QLineEdit(tx["desc"])
+
+        form.addRow("Type", type_combo)
+        form.addRow("Amount (RM)", amount_edit)
+        form.addRow("Category", category_edit)
+        form.addRow("Description", desc_edit)
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+
+        if dialog.exec_() != QDialog.Accepted:
+            return
+
+        try:
+            amount_val = money(amount_edit.text().strip())
+            if amount_val <= 0:
+                raise ValueError
+        except Exception:
+            QMessageBox.warning(self, "Invalid amount", "Enter a valid amount, e.g. 42.00")
+            return
+
+        updated = self.update_transaction_record(
+            tx["tx_id"],
+            new_type=type_combo.currentText(),
+            new_category=category_edit.text().strip(),
+            new_amount=amount_val,
+            new_desc=desc_edit.text().strip(),
+        )
+        if not updated:
+            QMessageBox.critical(self, "Update failed", "Could not update the transaction in the ledger file.")
+            return
+        self.load_ledger()
+        self.load_budgets()
+        self.refresh_category_options()
+        self.update_balance()
+        self.update_summary()
+        self.transaction_list.setCurrentRow(row)
+        self.toast("Transaction updated.")
+
+    def duplicate_transaction(self, row: int):
+        if row < 0 or row >= len(self.transactions):
+            return
+        tx = self.transactions[row]
+        txid = next_tx_id()
+        ensure_writable(LEDGER_CSV)
+        with LEDGER_CSV.open("a", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow([txid, tx["date"], tx["type"], tx["category"], f"{tx['amount']:.2f}", tx["desc"]])
+        ensure_private_file(LEDGER_CSV)
+        self.undo_stack.append(("transaction", txid))
+        self.undo_stack = self.undo_stack[-20:]
+        self.load_ledger()
+        self.load_budgets()
+        self.refresh_category_options()
+        self.update_balance()
+        self.update_summary()
+        self.toast("Transaction duplicated.")
+
+    def delete_transaction(self, row: int):
+        if row < 0 or row >= len(self.transactions):
+            return
+        tx = self.transactions[row]
+        confirm = QMessageBox.question(
+            self,
+            "Delete transaction",
+            f"Remove transaction {tx['tx_id']}?\nThis cannot be undone.",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+        if not self._remove_transaction_by_id(tx["tx_id"]):
+            QMessageBox.critical(self, "Delete failed", "Unable to remove the transaction.")
+            return
+        self.load_ledger()
+        self.load_budgets()
+        self.refresh_category_options()
+        self.update_balance()
+        self.update_summary()
+        self.toast("Transaction deleted.")
 
     def edit_selected_savings(self):
         row = self.transaction_list.currentRow()
@@ -1248,6 +2018,28 @@ class BudgetTracker(QWidget):
         self.reclass_category_input.clear()
         QMessageBox.information(self, "Updated", "Transaction has been updated.")
 
+    def _remove_transaction_by_id(self, tx_id: str) -> bool:
+        if not tx_id:
+            return False
+        try:
+            with LEDGER_CSV.open(newline="", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                rows = list(reader)
+                header = reader.fieldnames or LEDGER_HEADER
+        except FileNotFoundError:
+            return False
+        remaining = [row for row in rows if row.get("tx_id") != tx_id]
+        if len(remaining) == len(rows):
+            return False
+        ensure_writable(LEDGER_CSV)
+        with LEDGER_CSV.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=header)
+            writer.writeheader()
+            for row in remaining:
+                writer.writerow({field: row.get(field, "") for field in header})
+        ensure_private_file(LEDGER_CSV)
+        return True
+
     def update_transaction_record(
         self,
         tx_id: str,
@@ -1299,12 +2091,61 @@ class BudgetTracker(QWidget):
         ensure_private_file(LEDGER_CSV)
         return True
 
-    def export_monthly_data(self):
-        monthly = self.current_month_transactions()
-        if not monthly:
-            QMessageBox.information(self, "Nothing to export", "No transactions recorded for the current month.")
+    def export_summary_as_png(self):
+        if not hasattr(self, "summary_card"):
+            QMessageBox.warning(self, "Summary unavailable", "The summary panel is not ready yet.")
             return
-        default_name = f"student_budget_{date.today().strftime('%Y_%m')}.csv"
+        year, month = self._selected_period()
+        suggested = Path.home() / f"finfix_summary_{year}_{month:02d}.png"
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Summary as PNG",
+            str(suggested),
+            "PNG Files (*.png)",
+        )
+        if not file_path:
+            return
+        pixmap = self.summary_card.grab()
+        if not pixmap.save(file_path, "PNG"):
+            QMessageBox.critical(self, "Export failed", "Unable to save the summary as PNG.")
+            return
+        self.toast(f"Summary image exported to {file_path}")
+
+    def export_summary_as_pdf(self):
+        if not hasattr(self, "summary_card"):
+            QMessageBox.warning(self, "Summary unavailable", "The summary panel is not ready yet.")
+            return
+        year, month = self._selected_period()
+        suggested = Path.home() / f"finfix_summary_{year}_{month:02d}.pdf"
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Summary as PDF",
+            str(suggested),
+            "PDF Files (*.pdf)",
+        )
+        if not file_path:
+            return
+        printer = QPrinter(QPrinter.HighResolution)
+        printer.setOutputFormat(QPrinter.OutputFormat.PdfFormat)
+        printer.setOutputFileName(file_path)
+        painter = QPainter(printer)
+        pixmap = self.summary_card.grab()
+        rect = painter.viewport()
+        size = pixmap.size()
+        size.scale(rect.size(), Qt.AspectRatioMode.KeepAspectRatio)
+        painter.setViewport(rect.x(), rect.y(), size.width(), size.height())
+        painter.setWindow(pixmap.rect())
+        painter.drawPixmap(0, 0, pixmap)
+        painter.end()
+        self.toast(f"Summary PDF exported to {file_path}")
+
+    def export_monthly_data(self):
+        year, month = self._selected_period()
+        monthly = self.current_month_transactions(year=year, month=month)
+        if not monthly:
+            QMessageBox.information(self, "Nothing to export", "No transactions recorded for the selected month.")
+            return
+        default_name = f"finfix_transactions_{year}_{month:02d}.csv"
         suggested_path = Path.home() / default_name
         file_path, _ = QFileDialog.getSaveFileName(
             self,
@@ -1330,7 +2171,7 @@ class BudgetTracker(QWidget):
         except Exception as exc:
             QMessageBox.critical(self, "Export failed", f"Could not export data:\n{exc}")
             return
-        QMessageBox.information(self, "Export complete", f"Monthly data exported to:\n{file_path}")
+        self.toast(f"Monthly data exported to {file_path}")
 
     def show_savings_visual(self):
         monthly_savings = self.current_month_transactions("savings")
@@ -1472,6 +2313,13 @@ class BudgetTracker(QWidget):
         dialog.exec_()
 
 
+    def submit_default_transaction(self):
+        self.handle_add_tx(self.last_tx_type)
+
+    def handle_add_tx(self, ttype: str):
+        self.last_tx_type = ttype
+        self.add_tx(ttype)
+
     def add_tx(self, ttype: str):
         amt_text = self.amount_input.text().strip()
         if not amt_text:
@@ -1497,6 +2345,8 @@ class BudgetTracker(QWidget):
             writer = csv.writer(f)
             writer.writerow([txid, tx_date, ttype, raw_category, f"{amt:.2f}", desc])
         ensure_private_file(LEDGER_CSV)
+        self.undo_stack.append(("transaction", txid))
+        self.undo_stack = self.undo_stack[-20:]
 
         self.load_ledger()
         self.load_budgets()
@@ -1516,10 +2366,36 @@ class BudgetTracker(QWidget):
                         "Budget exceeded",
                         f"You have exceeded the {raw_category} budget by RM {over:.2f} this month.",
                     )
+        self.toast(f"{ttype.capitalize()} added.")
 
     def update_balance(self):
-        self.balance_label.setText(f"Net Position: RM {self.balance:.2f}")
-        self.balance_label.setStyleSheet("color: #81C784;" if self.balance >= 0 else "color: #E57373;")
+        positive = self.balance >= 0
+        arrow = "🔺" if positive else "🔻"
+        fg = "#1B5E20" if positive else "#8B0000"
+        if self.theme_mode == "dark":
+            bg = "#1E3A29" if positive else "#2A1515"
+        else:
+            bg = "#E8F5E9" if positive else "#FDE0DC"
+        self.balance_label.setText(f"{arrow} Net Position: RM {self.balance:.2f}")
+        self.balance_label.setStyleSheet(f"color: {fg}; background-color: {bg};")
+
+    def undo_last_transaction(self):
+        if not self.undo_stack:
+            self.toast("Nothing to undo.", 3000)
+            return
+        action, txid = self.undo_stack.pop()
+        if action != "transaction":
+            self.toast("Nothing to undo.", 3000)
+            return
+        if not self._remove_transaction_by_id(txid):
+            self.toast("Unable to undo last transaction.", 4000)
+            return
+        self.load_ledger()
+        self.load_budgets()
+        self.refresh_category_options()
+        self.update_balance()
+        self.update_summary()
+        self.toast("Last transaction undone.", 4000)
 
     def clear_inputs(self):
         self.amount_input.clear()
@@ -1533,7 +2409,9 @@ class BudgetTracker(QWidget):
     def toggle_theme(self):
         self.theme_mode = "light" if self.theme_mode == "dark" else "dark"
         self.apply_theme()
+        self.load_budgets()
         self.update_balance()
+        self.update_summary()
 
     def apply_theme(self):
         if self.theme_mode == "dark":
