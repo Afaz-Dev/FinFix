@@ -1234,8 +1234,11 @@ class BudgetTracker(QMainWindow):
                         self.categories.add(tx["category"])
                     if tx["type"] == "income":
                         self.balance += tx["amount"]
-                    else:
+                    elif tx["type"] == "expense":
                         self.balance -= tx["amount"]
+                    else:
+                        # Savings are neutral (transfer) — do not change balance
+                        pass
         except FileNotFoundError:
             return
 
@@ -1526,7 +1529,7 @@ class BudgetTracker(QMainWindow):
             "income": totals["income"],
             "expense": totals["expense"],
             "savings": totals["savings"],
-            "net": totals["income"] - totals["expense"] - totals["savings"],
+            "net": totals["income"] - totals["expense"],
         }
         for key, value in metrics.items():
             card = self.kpi_cards.get(key)
@@ -1706,11 +1709,11 @@ class BudgetTracker(QMainWindow):
         income = totals["income"]
         daily_burn = expense / days_elapsed if days_elapsed > 0 else Decimal("0.00")
         projected_spend = expense + (daily_burn * days_remaining)
-        net_forecast = income - savings - projected_spend
+        net_forecast = income - projected_spend
         if days_remaining > 0:
-            safe_to_spend = (income - savings - expense) / days_remaining
+            safe_to_spend = (income - expense) / days_remaining
         else:
-            safe_to_spend = income - savings - expense
+            safe_to_spend = income - expense
         self.forecast_label.setText(
             f"Forecast month-end: RM {net_forecast:.2f} | Safe-to-spend today: RM {safe_to_spend:.2f}"
         )
