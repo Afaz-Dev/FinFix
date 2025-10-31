@@ -1525,8 +1525,9 @@ class BudgetTracker(QMainWindow):
             if ttype == "income":
                 totals["income"] += amount
             elif ttype == "savings":
+                # Savings should not appear in the expense category breakdown
+                # Track savings total only; exclude from category_totals and daily expense
                 totals["savings"] += amount
-                category_totals[category] += amount
             else:
                 totals["expense"] += amount
                 category_totals[category] += amount
