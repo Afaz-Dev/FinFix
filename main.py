@@ -710,6 +710,8 @@ class BudgetTracker(QMainWindow):
         self.transaction_list.setAlternatingRowColors(True)
         ledger_layout.addWidget(self.transaction_list)
 
+        self.use_savings_btn = QPushButton("Use Savings")
+        self.use_savings_btn.setObjectName("SecondaryButton")
         self.edit_transaction_btn = QPushButton("Edit Transaction")
         self.edit_transaction_btn.setObjectName("SecondaryButton")
         self.delete_btn = QPushButton("Delete Transaction")
@@ -720,11 +722,13 @@ class BudgetTracker(QMainWindow):
         action_layout.setContentsMargins(14, 10, 14, 10)
         action_layout.setSpacing(12)
         action_layout.addStretch(1)
+        action_layout.addWidget(self.use_savings_btn)
         action_layout.addWidget(self.edit_transaction_btn)
         action_layout.addWidget(self.delete_btn)
         ledger_layout.addWidget(action_bar)
         self.transaction_list.currentRowChanged.connect(self.update_reclass_ui)
         self.transactions_action_bar = action_bar
+        self.use_savings_btn.setEnabled(False)
         self.edit_transaction_btn.setEnabled(False)
         self.delete_btn.setEnabled(False)
 
@@ -933,6 +937,7 @@ class BudgetTracker(QMainWindow):
         self.expense_chart_btn.clicked.connect(self.show_expense_pie_chart)
         self.currency_convert_btn.clicked.connect(self.perform_currency_conversion)
         self.currency_update_btn.clicked.connect(self.refresh_exchange_rates)
+        self.use_savings_btn.clicked.connect(self.use_savings_funds)
         self.edit_transaction_btn.clicked.connect(self.edit_selected_transaction)
         self.delete_btn.clicked.connect(self.delete_selected_transaction)
 
@@ -1237,7 +1242,7 @@ class BudgetTracker(QMainWindow):
                     elif tx["type"] == "expense":
                         self.balance -= tx["amount"]
                     else:
-                        # Savings are neutral (transfer) — do not change balance
+                        # Savings are neutral (transfer) - do not change balance
                         pass
         except FileNotFoundError:
             return
@@ -1245,10 +1250,12 @@ class BudgetTracker(QMainWindow):
         for tx in self.transactions:
             sign = "+" if tx["type"] == "income" else "-"
             tx_id = tx["tx_id"] or "-"
-            display = f"{tx['date']} | {tx['category']} | {sign} RM{tx['amount']:.2f} | {tx['desc']}  ({tx_id})"
+            display_amount = abs(tx["amount"])
+            display = f"{tx['date']} | {tx['category']} | {sign} RM{display_amount:.2f} | {tx['desc']}  ({tx_id})"
             self.transaction_list.addItem(display)
         self.refresh_period_controls()
         self.update_reclass_ui(self.transaction_list.currentRow())
+        self.update_use_savings_button()
 
     def current_month_transactions(
         self,
@@ -1274,6 +1281,17 @@ class BudgetTracker(QMainWindow):
                 continue
             matches.append(tx)
         return matches
+
+    def update_use_savings_button(self):
+        if not hasattr(self, "use_savings_btn"):
+            return
+        totals: defaultdict[str, Decimal] = defaultdict(lambda: Decimal("0.00"))
+        for tx in self.transactions:
+            if tx["type"] == "savings":
+                category = tx["category"] or "Savings"
+                totals[category] += tx["amount"]
+        has_available = any(amount > 0 for amount in totals.values())
+        self.use_savings_btn.setEnabled(has_available)
 
     def load_budgets(self):
         self.budget_list.clear()
@@ -2053,6 +2071,131 @@ class BudgetTracker(QMainWindow):
             QMessageBox.information(self, "Select a transaction", "Choose a transaction to edit.")
             return
         self.edit_transaction(row)
+
+    def use_savings_funds(self):
+        if not self.transactions:
+            QMessageBox.information(self, "No savings available", "Record savings deposits before using them.")
+            return
+        savings_totals: defaultdict[str, Decimal] = defaultdict(lambda: Decimal("0.00"))
+        for tx in self.transactions:
+            if tx["type"] != "savings":
+                continue
+            category = tx["category"] or "Savings"
+            savings_totals[category] += tx["amount"]
+        available_totals = {cat: amt for cat, amt in savings_totals.items() if amt > 0}
+        if not available_totals:
+            QMessageBox.information(
+                self,
+                "No savings available",
+                "All savings have been used. Add new savings deposits before withdrawing.",
+            )
+            return
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Use Savings")
+        layout = QVBoxLayout(dialog)
+        form = QFormLayout()
+
+        amount_edit = QLineEdit()
+        amount_edit.setPlaceholderText("Amount to use (RM)")
+        amount_edit.setValidator(QDoubleValidator(0.01, 1_000_000.0, 2))
+        form.addRow("Amount (RM)", amount_edit)
+
+        savings_combo = QComboBox()
+        savings_combo.addItems(sorted(available_totals.keys(), key=str.lower))
+        form.addRow("From savings category", savings_combo)
+
+        available_label = QLabel()
+        available_label.setObjectName("InfoText")
+        form.addRow("Available", available_label)
+
+        expense_combo = QComboBox()
+        expense_combo.setEditable(True)
+        existing_categories = sorted({cat for cat in self.categories if cat}, key=str.lower)
+        for cat in existing_categories:
+            if expense_combo.findText(cat) == -1:
+                expense_combo.addItem(cat)
+        if expense_combo.findText("General") == -1:
+            expense_combo.insertItem(0, "General")
+        expense_combo.setCurrentText("General")
+        form.addRow("Expense category", expense_combo)
+
+        desc_edit = QLineEdit()
+        desc_edit.setPlaceholderText("Description (optional)")
+        form.addRow("Description", desc_edit)
+
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+
+        def refresh_available():
+            category = savings_combo.currentText().strip() or "Savings"
+            amount = available_totals.get(category, Decimal("0.00"))
+            available_label.setText(f"RM {amount:.2f}")
+
+        savings_combo.currentIndexChanged.connect(refresh_available)
+        refresh_available()
+
+        if dialog.exec_() != QDialog.Accepted:
+            return
+
+        amount_text = amount_edit.text().strip()
+        if not amount_text:
+            QMessageBox.warning(self, "Amount required", "Enter an amount to withdraw.")
+            return
+        try:
+            amount = money(amount_text)
+            if amount <= 0:
+                raise ValueError
+        except Exception:
+            QMessageBox.critical(self, "Invalid amount", "Enter a valid amount, e.g. 150.00")
+            return
+
+        savings_category = savings_combo.currentText().strip() or "Savings"
+        available_amount = available_totals.get(savings_category, Decimal("0.00"))
+        if amount > available_amount:
+            QMessageBox.warning(
+                self,
+                "Not enough savings",
+                f"Only RM {available_amount:.2f} is available in {savings_category}.",
+            )
+            return
+
+        expense_category = expense_combo.currentText().strip() or "General"
+        description = desc_edit.text().strip() or f"Used savings for {expense_category}"
+
+        first_tx_id = next_tx_id()
+        try:
+            base_number = int(first_tx_id[2:])
+        except ValueError:
+            base_number = 0
+        second_tx_id = f"TX{base_number + 1:03d}"
+        today_str = date.today().isoformat()
+
+        ensure_writable(LEDGER_CSV)
+        with LEDGER_CSV.open("a", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(
+                [first_tx_id, today_str, "savings", savings_category, f"{-amount:.2f}", f"Withdrawal: {description}"]
+            )
+            writer.writerow(
+                [second_tx_id, today_str, "expense", expense_category, f"{amount:.2f}", description]
+            )
+        ensure_private_file(LEDGER_CSV)
+
+        self.undo_stack.append(("transaction", second_tx_id))
+        self.undo_stack.append(("transaction", first_tx_id))
+        self.undo_stack = self.undo_stack[-20:]
+
+        self.load_ledger()
+        self.load_budgets()
+        self.refresh_category_options()
+        self.update_balance()
+        self.update_summary()
+        self.toast("Savings applied to expense.")
 
     def _remove_transaction_by_id(self, tx_id: str) -> bool:
         if not tx_id:
