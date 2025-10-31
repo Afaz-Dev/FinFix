@@ -545,7 +545,7 @@ class BudgetTracker(QMainWindow):
         self.balance = Decimal("0.00")
         self.undo_stack = []
         self.last_tx_type = "expense"
-        self.show_converter = True
+        self.show_converter = False
         self.toggle_converter_action: QAction | None = None
         self.converter_window: FloatingConverterWindow | None = None
         ensure_storage()
