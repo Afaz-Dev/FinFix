@@ -105,7 +105,9 @@ QLabel#SummaryKPIValue { font-size: 18px; font-weight: 700; color: #FFFFFF; }
 QLabel#SummaryKPIDelta { font-size: 12px; color: #B0BEC5; }
 QFrame#SummarySubCard { background-color: #1F1F26; border: 1px solid #2E2E38; border-radius: 12px; }
 QTableWidget#SummaryTable { background-color: #1E1E24; border: 1px solid #2C2C34; border-radius: 10px; gridline-color: #2C2C34; }
-QTableWidget#SummaryTable::item { padding: 6px; font-size: 12px; }
+QTableWidget#SummaryTable::item { padding: 6px; font-size: 12px; background-color: #1E1E24; color: #E0E0E0; }
+QTableWidget#SummaryTable::item:alternate { background-color: #262631; }
+QTableWidget#SummaryTable::item:selected { background-color: #2F3B59; color: #FFFFFF; }
 QTableWidget#SummaryTable QHeaderView::section { background-color: #252532; color: #E0E0E0; font-size: 12px; padding: 6px; border: none; }
 QListWidget#SummaryAlerts { background-color: #1E1E24; border: 1px solid #2C2C34; border-radius: 10px; padding: 6px; font-family: 'Segoe UI'; }
 QListWidget#SummaryAlerts::item { border-bottom: 1px solid #2C2C34; padding: 6px 4px; }
@@ -140,7 +142,9 @@ QLabel#SummaryKPIValue { font-size: 18px; font-weight: 700; color: #1B5E20; }
 QLabel#SummaryKPIDelta { font-size: 12px; color: #546E7A; }
 QFrame#SummarySubCard { background-color: #FFFFFF; border: 1px solid #DADFE6; border-radius: 12px; }
 QTableWidget#SummaryTable { background-color: #FFFFFF; border: 1px solid #D6D6D6; border-radius: 10px; gridline-color: #E0E0E0; }
-QTableWidget#SummaryTable::item { padding: 6px; font-size: 12px; }
+QTableWidget#SummaryTable::item { padding: 6px; font-size: 12px; background-color: #FFFFFF; color: #212121; }
+QTableWidget#SummaryTable::item:alternate { background-color: #F4F6FB; }
+QTableWidget#SummaryTable::item:selected { background-color: #D9E4FF; color: #1A237E; }
 QTableWidget#SummaryTable QHeaderView::section { background-color: #ECEFF1; color: #37474F; font-size: 12px; padding: 6px; border: none; }
 QListWidget#SummaryAlerts { background-color: #FFFFFF; border: 1px solid #D6D6D6; border-radius: 10px; padding: 6px; font-family: 'Segoe UI'; }
 QListWidget#SummaryAlerts::item { border-bottom: 1px solid #E0E0E0; padding: 6px 4px; }
@@ -250,6 +254,8 @@ class CardWorkspace(QWidget):
         if not ordered:
             return 0
         for idx, widget in enumerate(ordered):
+            if widget.isHidden():
+                continue
             geom = widget.geometry()
             if pos.y() < geom.top():
                 return idx
@@ -259,6 +265,9 @@ class CardWorkspace(QWidget):
                 return idx if pos.x() <= geom.center().x() else min(idx + 1, len(ordered))
         return len(ordered)
 
+    def relayout(self) -> None:
+        self._rebuild()
+
     def _rebuild(self) -> None:
         while self._layout.count():
             item = self._layout.takeAt(0)
@@ -267,7 +276,8 @@ class CardWorkspace(QWidget):
             widget = item.widget()
             if widget is not None:
                 widget.setParent(self)
-        for idx, card in enumerate(self._cards):
+        visible_cards = [card for card in self._cards if not card.isHidden()]
+        for idx, card in enumerate(visible_cards):
             row = idx // self.columns
             col = idx % self.columns
             self._layout.addWidget(card, row, col)
@@ -519,6 +529,9 @@ class BudgetTracker(QMainWindow):
         self.balance = Decimal("0.00")
         self.undo_stack = []
         self.last_tx_type = "expense"
+        self.show_converter = True
+        self.toggle_converter_action: QAction | None = None
+        self.converter_card: QFrame | None = None
         ensure_storage()
         rate_snapshot = load_cached_rates()
         self.exchange_rates = rate_snapshot.get("rates", {"MYR": 1.0})
@@ -671,7 +684,7 @@ class BudgetTracker(QMainWindow):
         converter_layout = QVBoxLayout(converter_card)
         converter_layout.setContentsMargins(20, 20, 20, 20)
         converter_layout.setSpacing(12)
-        converter_header = QLabel("Currency Converter (Optional, online)")
+        converter_header = QLabel("Currency Converter")
         converter_header.setObjectName("SectionTitle")
         converter_layout.addWidget(converter_header)
 
@@ -705,6 +718,8 @@ class BudgetTracker(QMainWindow):
         self.currency_info_label.setObjectName("InfoText")
         self.currency_info_label.setWordWrap(True)
         converter_layout.addWidget(self.currency_info_label)
+        self.converter_card = converter_card
+        converter_card.setVisible(self.show_converter)
 
         ledger_card = QFrame()
         ledger_card.setObjectName("Card")
@@ -987,11 +1002,31 @@ class BudgetTracker(QMainWindow):
             toggle_theme_action.triggered.connect(self.toggle_theme)
             view_menu.addAction(toggle_theme_action)
 
+            toggle_converter_action = QAction("Show Currency Converter", self)
+            toggle_converter_action.setCheckable(True)
+            toggle_converter_action.setChecked(self.show_converter)
+            toggle_converter_action.toggled.connect(self.toggle_currency_converter)
+            view_menu.addAction(toggle_converter_action)
+            self.toggle_converter_action = toggle_converter_action
+
     def _install_shortcuts(self):
         QShortcut(QKeySequence("Return"), self, self.submit_default_transaction)
         QShortcut(QKeySequence("Enter"), self, self.submit_default_transaction)
         QShortcut(QKeySequence("Ctrl+Z"), self, self.undo_last_transaction)
         QShortcut(QKeySequence("Ctrl+E"), self, self.export_monthly_data)
+
+    def toggle_currency_converter(self, checked: bool):
+        self.show_converter = bool(checked)
+        if self.toggle_converter_action is not None and self.toggle_converter_action.isChecked() != self.show_converter:
+            self.toggle_converter_action.blockSignals(True)
+            self.toggle_converter_action.setChecked(self.show_converter)
+            self.toggle_converter_action.blockSignals(False)
+        card = getattr(self, "converter_card", None)
+        if card is None:
+            return
+        card.setVisible(self.show_converter)
+        if hasattr(self, "cards_workspace"):
+            self.cards_workspace.relayout()
 
     def toast(self, message: str, timeout_ms: int = 4000):
         if hasattr(self, "status_bar"):
@@ -1443,7 +1478,7 @@ class BudgetTracker(QMainWindow):
             table.setItem(row, 3, variance_item)
 
             if used_percent is not None:
-                percent_item = QTableWidgetItem(f"{used_percent:.0f}%")
+                percent_item = QTableWidgetItem("")
                 percent_item.setData(Qt.ItemDataRole.UserRole, float(used_percent))
                 table.setItem(row, 4, percent_item)
                 progress = QProgressBar()
@@ -2378,8 +2413,8 @@ class BudgetTracker(QMainWindow):
 
     def update_balance(self):
         positive = self.balance >= 0
-        arrow = "🔺" if positive else "🔻"
-        fg = "#1B5E20" if positive else "#8B0000"
+        arrow = "^" if positive else "v"
+        fg = "#81C784" if positive else "#E57373"
         if self.theme_mode == "dark":
             bg = "#1E3A29" if positive else "#2A1515"
         else:
