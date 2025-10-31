@@ -1021,6 +1021,8 @@ class BudgetTracker(QWidget):
     def update_summary(self):
         if not hasattr(self, "summary_overview_label"):
             return
+        self.summary_overview_label.setStyleSheet("")
+        self.summary_category_label.setStyleSheet("")
         if not self.transactions:
             self.summary_overview_label.setText("No transactions recorded yet.")
             self.summary_category_label.setText("Category breakdown will appear once you log spending.")
@@ -1064,12 +1066,15 @@ class BudgetTracker(QWidget):
 
         if category_totals:
             category_lines = []
+            over_budget = False
             for category in sorted(category_totals.keys()):
                 spent = category_totals[category]
                 budget = self.budget_map.get(category)
                 if budget:
                     variance = budget - spent
                     status = "within budget" if spent <= budget else "over budget"
+                    if spent > budget:
+                        over_budget = True
                     category_lines.append(
                         f"&#8226; <b>{category}:</b> RM {spent:.2f} / RM {budget:.2f} "
                         f"({status}, variance RM {variance:.2f})"
@@ -1078,8 +1083,14 @@ class BudgetTracker(QWidget):
                     category_lines.append(f"&#8226; <b>{category}:</b> RM {spent:.2f} (no budget set)")
             category_html = "<b>Category breakdown:</b><br>" + "<br>".join(category_lines)
         else:
+            over_budget = False
             category_html = "<b>Category breakdown:</b><br>No category spending recorded this month."
         self.summary_category_label.setText(category_html)
+
+        status_color = "#E57373" if over_budget else "#81C784"
+        style = f"color: {status_color}; background-color: transparent;"
+        self.summary_overview_label.setStyleSheet(style)
+        self.summary_category_label.setStyleSheet(style)
 
     def category_monthly_total(self, category: str) -> Decimal:
         today = date.today()
