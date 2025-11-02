@@ -17,6 +17,7 @@ import csv, os, shutil, sys, stat, importlib, json, time, ctypes, calendar
 from pathlib import Path
 
 import requests
+import sys
 
 Figure = None
 FigureCanvasQTAgg = None
@@ -949,6 +950,14 @@ class BudgetTracker(QMainWindow):
         self.update_balance()
         self.update_summary()
 
+    def show_error_popup(self, title, message):
+        msg = QMessageBox()
+        msg.setIcon(QMessageBox.Critical)
+        msg.setWindowTitle(title)
+        msg.setText(message)
+        msg.setStandardButtons(QMessageBox.Ok)
+        msg.exec_()
+
     def _build_menu(self):
         menu_bar = self.menuBar()
         if menu_bar is None:
@@ -1245,6 +1254,7 @@ class BudgetTracker(QMainWindow):
                         # Savings are neutral (transfer) - do not change balance
                         pass
         except FileNotFoundError:
+            self.show_error_popup("Error", "Ledger file not found!")
             return
 
         for tx in self.transactions:
