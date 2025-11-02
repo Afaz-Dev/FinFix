@@ -2423,9 +2423,26 @@ class BudgetTracker(QMainWindow):
         self.toast(f"Monthly data exported to {file_path}")
 
     def show_savings_visual(self):
-        monthly_savings = self.current_month_transactions("savings")
-        if not monthly_savings:
-            QMessageBox.information(self, "No savings recorded", "Log some savings transactions to view the chart.")
+        year, month = self._selected_period()
+        last_day = calendar.monthrange(year, month)[1]
+        period_end = date(year, month, last_day)
+        savings_entries: list[dict] = []
+        for tx in self.transactions:
+            if tx.get("type") != "savings":
+                continue
+            try:
+                tx_date = date.fromisoformat(tx["date"])
+            except ValueError:
+                continue
+            if tx_date > period_end:
+                continue
+            savings_entries.append(tx)
+        if not savings_entries:
+            QMessageBox.information(
+                self,
+                "No savings recorded",
+                "Log savings transactions to view the chart.",
+            )
             return
         if not MATPLOTLIB_AVAILABLE:
             QMessageBox.warning(
@@ -2442,23 +2459,20 @@ class BudgetTracker(QMainWindow):
             )
             return
         totals = defaultdict(lambda: Decimal("0.00"))
-        for tx in monthly_savings:
-            amount = tx["amount"]
-            if amount <= 0:
-                continue
+        for tx in savings_entries:
             category = tx["category"] or "Savings"
-            totals[category] += amount
-        categories = sorted(totals.keys(), key=str.lower)
-        if not categories:
+            totals[category] += tx["amount"]
+        positive_totals = {cat: amt for cat, amt in totals.items() if amt > Decimal("0.00")}
+        if not positive_totals:
             QMessageBox.information(
                 self,
-                "No savings deposits",
-                "Log savings deposits this month to view the chart.",
+                "No savings balance",
+                "All savings have been used for the selected period.",
             )
             return
-        values = [float(totals[cat]) for cat in categories]
+        categories = sorted(positive_totals.keys(), key=str.lower)
+        values = [float(positive_totals[cat]) for cat in categories]
 
-        year, month = self._selected_period()
         period_label = date(year, month, 1).strftime("%B %Y")
         dark_mode = getattr(self, "theme_mode", "dark") == "dark"
         text_color = "#E0E0E0" if dark_mode else "#212121"
@@ -2495,9 +2509,8 @@ class BudgetTracker(QMainWindow):
             self,
             help_title="Savings Chart Help",
             help_text=(
-                "This bar chart shows the total amount saved per category for the current month. "
-                "Each bar sums savings deposit transactions recorded under that category. "
-                "Withdrawals are omitted to keep the focus on contributions."
+                "This bar chart shows cumulative savings per category up to the selected month. "
+                "Each bar reflects deposits minus any withdrawals recorded for that category."
             ),
         )
         dialog.setWindowTitle("Monthly Savings Visualization")
