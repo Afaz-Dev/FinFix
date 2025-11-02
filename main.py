@@ -1590,6 +1590,8 @@ class BudgetTracker(QMainWindow):
                 diff = value - previous_value
                 if diff > Decimal("0.00"):
                     arrow, color = "▲", "#81C784"
+                    if key == "expense":
+                        color = "#FFB74D"
                 elif diff < Decimal("0.00"):
                     arrow, color = "▼", "#E57373"
                 else:
@@ -2431,20 +2433,42 @@ class BudgetTracker(QMainWindow):
             return
         totals = defaultdict(lambda: Decimal("0.00"))
         for tx in monthly_savings:
-            totals[tx["category"]] += tx["amount"]
-        categories = sorted(totals.keys())
+            amount = tx["amount"]
+            if amount <= 0:
+                continue
+            category = tx["category"] or "Savings"
+            totals[category] += amount
+        categories = sorted(totals.keys(), key=str.lower)
         if not categories:
-            QMessageBox.information(self, "No savings categories", "Savings entries need a category to build the chart.")
+            QMessageBox.information(
+                self,
+                "No savings deposits",
+                "Log savings deposits this month to view the chart.",
+            )
             return
         values = [float(totals[cat]) for cat in categories]
 
+        year, month = self._selected_period()
+        period_label = date(year, month, 1).strftime("%B %Y")
+        dark_mode = getattr(self, "theme_mode", "dark") == "dark"
+        text_color = "#E0E0E0" if dark_mode else "#212121"
+        border_color = "#2C2C34" if dark_mode else "#9E9E9E"
+        background_color = "#121212" if dark_mode else "#FFFFFF"
+        axes_color = "#1C1C21" if dark_mode else "#FFFFFF"
+
         fig = Figure(figsize=(6, 4))
+        fig.patch.set_facecolor(background_color)
         ax = fig.add_subplot(111)
+        ax.set_facecolor(axes_color)
         bars = ax.bar(categories, values, color="#03A9F4")
-        ax.set_title(f"Monthly Savings ({date.today().strftime('%B %Y')})")
-        ax.set_ylabel("Amount (RM)")
-        ax.set_ylim(bottom=0)
-        ax.tick_params(axis="x", labelrotation=20)
+        ax.set_title(f"Monthly Savings ({period_label})", color=text_color)
+        ax.set_ylabel("Amount (RM)", color=text_color)
+        max_value = max(values) if values else 0.0
+        ax.set_ylim(bottom=0, top=max_value * 1.2 if max_value > 0 else 1.0)
+        ax.tick_params(axis="x", labelrotation=20, colors=text_color)
+        ax.tick_params(axis="y", colors=text_color)
+        for spine in ax.spines.values():
+            spine.set_color(border_color)
         for bar, val in zip(bars, values, strict=False):
             ax.text(
                 bar.get_x() + bar.get_width() / 2,
@@ -2453,6 +2477,7 @@ class BudgetTracker(QMainWindow):
                 ha="center",
                 va="bottom",
                 fontsize=8,
+                color=text_color,
             )
         fig.tight_layout()
 
@@ -2461,7 +2486,8 @@ class BudgetTracker(QMainWindow):
             help_title="Savings Chart Help",
             help_text=(
                 "This bar chart shows the total amount saved per category for the current month. "
-                "Each bar sums all savings transactions recorded under that category."
+                "Each bar sums savings deposit transactions recorded under that category. "
+                "Withdrawals are omitted to keep the focus on contributions."
             ),
         )
         dialog.setWindowTitle("Monthly Savings Visualization")
