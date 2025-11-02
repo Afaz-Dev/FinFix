@@ -2496,6 +2496,7 @@ class BudgetTracker(QMainWindow):
         canvas = FigureCanvasQTAgg(fig)
         layout.addWidget(canvas)
         canvas.draw()
+        self._apply_titlebar_palette(dialog)
         dialog.exec_()
 
     def show_expense_pie_chart(self):
@@ -2524,15 +2525,25 @@ class BudgetTracker(QMainWindow):
             QMessageBox.information(self, "No expenses recorded", "No positive expenses available for this month.")
             return
 
+        year, month = self._selected_period()
+        period_label = date(year, month, 1).strftime("%B %Y")
+        dark_mode = getattr(self, "theme_mode", "dark") == "dark"
+        text_color = "#E0E0E0" if dark_mode else "#212121"
+        background_color = "#121212" if dark_mode else "#FFFFFF"
+        panel_color = "#1C1C21" if dark_mode else "#FFFFFF"
+        legend_face = "#1F1F26" if dark_mode else "#F2F2F2"
+        legend_border = "#2E2E38" if dark_mode else "#D0D0D0"
+
         fig = Figure(figsize=(6, 4))
+        fig.patch.set_facecolor(background_color)
         ax = fig.add_subplot(111)
+        ax.set_facecolor(panel_color)
         try:
             import matplotlib
             cmap = matplotlib.colormaps["viridis"]
             colors = [cmap(i / len(values)) for i in range(len(values))]
         except Exception:
             colors = None
-        text_color = "#FFFFFF" if self.theme_mode == "dark" else "#212121"
         wedges, texts = ax.pie(
             values,
             labels=None,
@@ -2540,6 +2551,7 @@ class BudgetTracker(QMainWindow):
             startangle=90,
             colors=colors,
             textprops={"color": text_color},
+            wedgeprops={"linewidth": 1.0, "edgecolor": background_color if dark_mode else "#FFFFFF"},
         )
         legend_labels = [f"{cat}: RM {val:.2f}" for cat, val in zip(categories, values, strict=False)]
         legend = ax.legend(
@@ -2548,14 +2560,14 @@ class BudgetTracker(QMainWindow):
             title="Categories",
             loc="center left",
             bbox_to_anchor=(1, 0.5),
-            facecolor="#2B2B34" if self.theme_mode == "dark" else "#F2F2F2",
-            edgecolor="#3C3C45" if self.theme_mode == "dark" else "#D0D0D0",
+            facecolor=legend_face,
+            edgecolor=legend_border,
         )
         for text in legend.get_texts():
             text.set_color(text_color)
         legend.get_title().set_color(text_color)
         ax.axis("equal")
-        ax.set_title(f"Monthly Expenses ({date.today().strftime('%B %Y')})")
+        ax.set_title(f"Monthly Expenses ({period_label})", color=text_color)
         fig.tight_layout()
 
         dialog = HelpAwareDialog(
@@ -2573,6 +2585,7 @@ class BudgetTracker(QMainWindow):
         canvas = FigureCanvasQTAgg(fig)
         layout.addWidget(canvas)
         canvas.draw()
+        self._apply_titlebar_palette(dialog)
         dialog.exec_()
 
 
@@ -2687,11 +2700,11 @@ class BudgetTracker(QMainWindow):
         self.update_titlebar_theme()
         self._refresh_card_shadows()
 
-    def update_titlebar_theme(self):
-        if os.name != "nt":
+    def _apply_titlebar_palette(self, widget: QWidget | None) -> None:
+        if os.name != "nt" or widget is None:
             return
         try:
-            hwnd = int(self.winId())
+            hwnd = int(widget.winId())
             if hwnd == 0:
                 return
             dwmapi = ctypes.windll.dwmapi
@@ -2705,6 +2718,9 @@ class BudgetTracker(QMainWindow):
             dwmapi.DwmSetWindowAttribute(hwnd, 36, ctypes.byref(text_color), ctypes.sizeof(text_color))
         except Exception:
             pass
+
+    def update_titlebar_theme(self):
+        self._apply_titlebar_palette(self)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
