@@ -1762,14 +1762,14 @@ class BudgetTracker(QMainWindow):
             self.forecast_label.setText("Forecasts shown for the current month only.")
             return
         days_in_month = Decimal(calendar.monthrange(year, month)[1])
-        if not month_transactions:
+        current_transactions = [(tx, tx_date) for tx, tx_date in month_transactions if tx_date <= today]
+        if not current_transactions:
             self.forecast_label.setText("Forecast month-end: RM 0.00 | Safe-to-spend today: RM 0.00")
             return
         days_elapsed = Decimal(today.day)
         days_remaining = max(Decimal("0.00"), days_in_month - days_elapsed)
-        expense = totals["expense"]
-        savings = totals["savings"]
-        income = totals["income"]
+        expense = sum((tx["amount"] for tx, tx_date in current_transactions if tx["type"] == "expense"), Decimal("0.00"))
+        income = sum((tx["amount"] for tx, tx_date in current_transactions if tx["type"] == "income"), Decimal("0.00"))
         daily_burn = expense / days_elapsed if days_elapsed > 0 else Decimal("0.00")
         projected_spend = expense + (daily_burn * days_remaining)
         net_forecast = income - projected_spend
