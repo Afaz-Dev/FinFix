@@ -537,7 +537,7 @@ class HelpAwareDialog(QDialog):
 class BudgetTracker(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Student Budget Tracker")
+        self.setWindowTitle("FinFix : Student Budget Tracker")
         self.setGeometry(200, 200, 520, 720)
         self.theme_mode = "dark"
         self.transactions = []
@@ -581,7 +581,7 @@ class BudgetTracker(QMainWindow):
         welcome_text = f"Welcome, {raw_user}!" if raw_user else "Welcome!"
         welcome_label = QLabel(welcome_text)
         welcome_label.setObjectName("Subtitle")
-        title_label = QLabel("Student Budget Tracker")
+        title_label = QLabel("FinFix : Student Budget Tracker")
         title_label.setObjectName("Title")
         subtitle = QLabel("Track spending, budgets, and savings with a clear monthly view.")
         subtitle.setObjectName("Subtitle")
