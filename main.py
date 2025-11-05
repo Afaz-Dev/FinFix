@@ -2586,7 +2586,7 @@ class BudgetTracker(QMainWindow):
             self,
             help_title="Savings Chart Help",
             help_text=(
-                "This bar chart shows cumulative savings per category up to the selected month. "
+                "This battery icon shows cumulative savings per category up to the selected month. "
                 "Each bar reflects deposits minus any withdrawals recorded for that category."
             ),
         )
