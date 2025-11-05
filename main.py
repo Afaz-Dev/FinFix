@@ -2586,8 +2586,7 @@ class BudgetTracker(QMainWindow):
             self,
             help_title="Savings Chart Help",
             help_text=(
-                "This battery icon shows cumulative savings per category up to the selected month. "
-                "Each bar reflects deposits minus any withdrawals recorded for that category."
+                "This battery icon shows cumulative savings up to the selected month. "
             ),
         )
         dialog.setWindowTitle("Monthly Savings Visualization")
@@ -2608,7 +2607,7 @@ class BudgetTracker(QMainWindow):
             QMessageBox.warning(
                 self,
                 "Visualization unavailable",
-                "matplotlib is required to render charts.\nInstall it with: pip install matplotlib",
+                "matplotlib is required to render charts.\nInstall it by typing this into the terminal: pip install matplotlib",
             )
             return
         totals = defaultdict(lambda: Decimal("0.00"))
@@ -2676,7 +2675,7 @@ class BudgetTracker(QMainWindow):
             help_text=(
                 "This chart shows the expense distribution for the current month. "
                 "Amounts are based on all non-income transactions you have recorded. "
-                "Use the legend on the right to view category totals."
+                "The legend on the right shows category totals."
             ),
         )
         dialog.setWindowTitle("Monthly Expenses Pie Chart")
@@ -2821,6 +2820,12 @@ class BudgetTracker(QMainWindow):
 
     def update_titlebar_theme(self):
         self._apply_titlebar_palette(self)
+
+
+
+
+
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
