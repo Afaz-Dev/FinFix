@@ -2476,7 +2476,6 @@ class BudgetTracker(QMainWindow):
         period_label = date(year, month, 1).strftime("%B %Y")
         dark_mode = getattr(self, "theme_mode", "dark") == "dark"
         text_color = "#E0E0E0" if dark_mode else "#212121"
-        border_color = "#2C2C34" if dark_mode else "#9E9E9E"
         background_color = "#121212" if dark_mode else "#FFFFFF"
         axes_color = "#1C1C21" if dark_mode else "#FFFFFF"
 
@@ -2484,25 +2483,103 @@ class BudgetTracker(QMainWindow):
         fig.patch.set_facecolor(background_color)
         ax = fig.add_subplot(111)
         ax.set_facecolor(axes_color)
-        bars = ax.bar(categories, values, color="#03A9F4")
-        ax.set_title(f"Monthly Savings ({period_label})", color=text_color)
-        ax.set_ylabel("Amount (RM)", color=text_color)
+
         max_value = max(values) if values else 0.0
-        ax.set_ylim(bottom=0, top=max_value * 1.2 if max_value > 0 else 1.0)
-        ax.tick_params(axis="x", labelrotation=20, colors=text_color)
-        ax.tick_params(axis="y", colors=text_color)
-        for spine in ax.spines.values():
-            spine.set_color(border_color)
-        for bar, val in zip(bars, values, strict=False):
-            ax.text(
-                bar.get_x() + bar.get_width() / 2,
-                bar.get_height(),
-                f"RM {val:.2f}",
-                ha="center",
-                va="bottom",
-                fontsize=8,
-                color=text_color,
+        if max_value <= 0:
+            QMessageBox.information(
+                self,
+                "No savings balance",
+                "All savings have been used for the selected period.",
             )
+            return
+
+        try:
+            from matplotlib.patches import Rectangle
+        except Exception:
+            QMessageBox.warning(
+                self,
+                "Visualization unavailable",
+                "matplotlib is required to render charts.\nInstall it with: pip install matplotlib",
+            )
+            return
+
+        outline_color = "#29B6F6" if dark_mode else "#1565C0"
+        battery_height = 0.6
+        tip_width = max(max_value * 0.04, 0.25)
+        y_positions = list(range(len(categories)))
+
+        def level_color(value: float) -> str:
+            if max_value <= 0:
+                return "#90A4AE"
+            ratio = value / max_value
+            if ratio >= 0.75:
+                return "#4CAF50" if dark_mode else "#2E7D32"
+            if ratio >= 0.4:
+                return "#FFD740" if dark_mode else "#F9A825"
+            return "#FF7043" if dark_mode else "#E64A19"
+
+        ax.set_title(f"Monthly Savings ({period_label})", color=text_color)
+        ax.set_yticks(y_positions)
+        ax.set_yticklabels(categories, color=text_color, fontsize=9)
+        ax.set_xticks([])
+        ax.set_xlim(0, max_value + tip_width + max_value * 0.15)
+        ax.set_ylim(-0.75, len(categories) - 0.25)
+        ax.tick_params(axis="y", colors=text_color, length=0)
+        ax.tick_params(axis="x", length=0)
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+
+        # Draw each savings category as a battery-style cell.
+        for idx, value in enumerate(values):
+            y_center = y_positions[idx]
+            bottom = y_center - battery_height / 2
+            outline = Rectangle(
+                (0, bottom),
+                max_value,
+                battery_height,
+                linewidth=2,
+                edgecolor=outline_color,
+                facecolor="none",
+            )
+            ax.add_patch(outline)
+            tip = Rectangle(
+                (max_value, y_center - battery_height / 4),
+                tip_width,
+                battery_height / 2,
+                linewidth=0,
+                facecolor=outline_color,
+            )
+            ax.add_patch(tip)
+            fill_height = battery_height - 0.12
+            fill_bottom = bottom + (battery_height - fill_height) / 2
+            fill = Rectangle(
+                (0, fill_bottom),
+                value,
+                fill_height,
+                linewidth=0,
+                facecolor=level_color(value),
+            )
+            ax.add_patch(fill)
+            label_inside = value > max_value * 0.35
+            if label_inside:
+                label_x = value - max_value * 0.02
+                label_align = "right"
+            else:
+                label_x = value + max_value * 0.02
+                label_align = "left"
+            label_color = text_color
+            if label_inside and not dark_mode:
+                label_color = "#FFFFFF"
+            ax.text(
+                label_x,
+                y_center,
+                f"RM {value:.2f}",
+                va="center",
+                ha=label_align,
+                color=label_color,
+                fontsize=9,
+            )
+
         fig.tight_layout()
 
         dialog = HelpAwareDialog(
