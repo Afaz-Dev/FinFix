@@ -534,6 +534,78 @@ class HelpAwareDialog(QDialog):
         return super().event(event)
 
 
+class ChartWindow(QMainWindow):
+    """Standalone window that hosts a chart canvas with optional helper text."""
+
+    def __init__(self, title: str, help_text: str = "", parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
+        self.setMinimumSize(520, 380)
+        self.resize(720, 520)
+        self._canvas_widget: QWidget | None = None
+        self._help_label: QLabel | None = None
+        self._help_text = ""
+        self._theme_mode = "dark"
+
+        central = QWidget(self)
+        self.setCentralWidget(central)
+        layout = QVBoxLayout(central)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+        self._layout = layout
+        self.set_help_text(help_text)
+
+    def set_canvas(self, canvas: QWidget) -> None:
+        if self._canvas_widget is not None:
+            old_canvas = self._canvas_widget
+            self._layout.removeWidget(old_canvas)
+            old_canvas.setParent(None)
+            figure_obj = getattr(old_canvas, "figure", None)
+            if callable(figure_obj):
+                figure_obj = figure_obj()
+            if figure_obj is not None:
+                clear_method = getattr(figure_obj, "clear", None)
+                if callable(clear_method):
+                    try:
+                        clear_method()
+                    except Exception:
+                        pass
+            old_canvas.deleteLater()
+        canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self._layout.insertWidget(0, canvas)
+        self._canvas_widget = canvas
+
+    def set_help_text(self, help_text: str) -> None:
+        help_text = (help_text or "").strip()
+        if not help_text:
+            if self._help_label is not None:
+                self._layout.removeWidget(self._help_label)
+                self._help_label.deleteLater()
+                self._help_label = None
+            self._help_text = ""
+            return
+        self._help_text = help_text
+        if self._help_label is None:
+            label = QLabel(help_text, self)
+            label.setWordWrap(True)
+            label.setObjectName("ChartHelpLabel")
+            label.setContentsMargins(0, 8, 0, 0)
+            self._layout.addWidget(label)
+            self._help_label = label
+        else:
+            self._help_label.setText(help_text)
+        self.apply_theme(self._theme_mode)
+
+    def apply_theme(self, theme_mode: str) -> None:
+        self._theme_mode = theme_mode
+        if self._help_label is not None:
+            help_color = "#B0BEC5" if theme_mode == "dark" else "#455A64"
+            self._help_label.setStyleSheet(
+                f"color: {help_color}; font-size: 11px; margin-top: 2px;"
+            )
+
+
 class BudgetTracker(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -549,6 +621,7 @@ class BudgetTracker(QMainWindow):
         self.show_converter = False
         self.toggle_converter_action: QAction | None = None
         self.converter_window: FloatingConverterWindow | None = None
+        self.chart_windows: dict[str, ChartWindow] = {}
         ensure_storage()
         rate_snapshot = load_cached_rates()
         self.exchange_rates = rate_snapshot.get("rates", {"MYR": 1.0})
@@ -1156,6 +1229,27 @@ class BudgetTracker(QMainWindow):
     def toast(self, message: str, timeout_ms: int = 4000):
         if hasattr(self, "status_bar"):
             self.status_bar.showMessage(message, timeout_ms)
+
+    def _get_chart_window(self, key: str, title: str, help_text: str) -> ChartWindow:
+        window = self.chart_windows.get(key)
+        if window is None:
+            window = ChartWindow(title=title, help_text=help_text, parent=self)
+            window.setStyleSheet(self.styleSheet())
+            window.apply_theme(self.theme_mode)
+            self._apply_titlebar_palette(window)
+
+            def _cleanup(_=None, chart_key=key):
+                self.chart_windows.pop(chart_key, None)
+
+            window.destroyed.connect(_cleanup)
+            self.chart_windows[key] = window
+        else:
+            window.setWindowTitle(title)
+            window.set_help_text(help_text)
+        window.setStyleSheet(self.styleSheet())
+        window.apply_theme(self.theme_mode)
+        self._apply_titlebar_palette(window)
+        return window
 
     def handle_exit(self):
         self.close()
@@ -2582,21 +2676,21 @@ class BudgetTracker(QMainWindow):
 
         fig.tight_layout()
 
-        dialog = HelpAwareDialog(
-            self,
-            help_title="Savings Chart Help",
-            help_text=(
-                "This battery icon shows cumulative savings up to the selected month. "
-            ),
+        help_text = (
+            "Each battery shows cumulative savings per category up to the selected month. "
+            "The fill level reflects deposits minus any withdrawals recorded for that category."
         )
-        dialog.setWindowTitle("Monthly Savings Visualization")
-        dialog.resize(640, 420)
-        layout = QVBoxLayout(dialog)
+        window = self._get_chart_window(
+            "savings_chart",
+            f"Monthly Savings ({period_label})",
+            help_text,
+        )
         canvas = FigureCanvasQTAgg(fig)
-        layout.addWidget(canvas)
+        window.set_canvas(canvas)
         canvas.draw()
-        self._apply_titlebar_palette(dialog)
-        dialog.exec_()
+        window.show()
+        window.raise_()
+        window.activateWindow()
 
     def show_expense_pie_chart(self):
         monthly_expenses = self.current_month_transactions("expense")
@@ -2669,23 +2763,22 @@ class BudgetTracker(QMainWindow):
         ax.set_title(f"Monthly Expenses ({period_label})", color=text_color)
         fig.tight_layout()
 
-        dialog = HelpAwareDialog(
-            self,
-            help_title="Pie Chart Help",
-            help_text=(
-                "This chart shows the expense distribution for the current month. "
-                "Amounts are based on all non-income transactions you have recorded. "
-                "The legend on the right shows category totals."
-            ),
+        help_text = (
+            "This chart shows the expense distribution for the current month. "
+            "Amounts include every expense transaction recorded for the selected period. "
+            "Refer to the legend on the right for category totals."
         )
-        dialog.setWindowTitle("Monthly Expenses Pie Chart")
-        dialog.resize(640, 420)
-        layout = QVBoxLayout(dialog)
+        window = self._get_chart_window(
+            "expense_pie_chart",
+            f"Monthly Expenses ({period_label})",
+            help_text,
+        )
         canvas = FigureCanvasQTAgg(fig)
-        layout.addWidget(canvas)
+        window.set_canvas(canvas)
         canvas.draw()
-        self._apply_titlebar_palette(dialog)
-        dialog.exec_()
+        window.show()
+        window.raise_()
+        window.activateWindow()
 
 
     def submit_default_transaction(self):
@@ -2796,6 +2889,12 @@ class BudgetTracker(QMainWindow):
         self.setStyleSheet(stylesheet)
         if self.converter_window is not None:
             self.converter_window.setStyleSheet(stylesheet)
+        for window in list(self.chart_windows.values()):
+            if window is None:
+                continue
+            window.setStyleSheet(stylesheet)
+            window.apply_theme(self.theme_mode)
+            self._apply_titlebar_palette(window)
         self.update_titlebar_theme()
         self._refresh_card_shadows()
 
