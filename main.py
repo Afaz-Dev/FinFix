@@ -32,6 +32,9 @@ try:
 except Exception:
     MATPLOTLIB_AVAILABLE = False
 
+# App logo helpers (generated or assets/logo.png if available)
+from app_logo import get_app_icon, get_logo_pixmap
+
 DATA_DIR = Path.home() / ".finfix_data"
 LEGACY_DATA_DIR = Path("data")
 LEDGER_CSV = DATA_DIR / "transactions.csv"
@@ -540,6 +543,11 @@ class ChartWindow(QMainWindow):
     def __init__(self, title: str, help_text: str = "", parent: QWidget | None = None):
         super().__init__(parent)
         self.setWindowTitle(title)
+        # Set window icon for chart windows
+        try:
+            self.setWindowIcon(get_app_icon())
+        except Exception:
+            pass
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
         self.setMinimumSize(520, 380)
         self.resize(720, 520)
@@ -610,6 +618,11 @@ class BudgetTracker(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("FinFix : Student Budget Tracker")
+        # Set main window icon
+        try:
+            self.setWindowIcon(get_app_icon())
+        except Exception:
+            pass
         self.setGeometry(200, 200, 520, 720)
         self.theme_mode = "dark"
         self.transactions = []
@@ -647,6 +660,19 @@ class BudgetTracker(QMainWindow):
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(20, 14, 20, 14)
         header_layout.setSpacing(18)
+
+        # App logo on the left side of header
+        try:
+            logo_label = QLabel()
+            logo_label.setObjectName("AppLogo")
+            logo_pm = get_logo_pixmap(40)
+            logo_label.setPixmap(logo_pm)
+            logo_label.setFixedSize(40, 40)
+            logo_label.setScaledContents(True)
+            logo_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+            header_layout.addWidget(logo_label)
+        except Exception:
+            pass
 
         title_container = QVBoxLayout()
         title_container.setSpacing(4)
@@ -2928,6 +2954,11 @@ class BudgetTracker(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    # Set application-wide icon (affects taskbar/dock on many systems)
+    try:
+        app.setWindowIcon(get_app_icon())
+    except Exception:
+        pass
     win = BudgetTracker()
     win.show()
     sys.exit(app.exec_())
