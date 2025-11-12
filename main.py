@@ -192,65 +192,75 @@ QLabel#InfoText { color: #5F6368; font-size: 11px; background-color: transparent
 """.strip()
 
 
-class AnimatedButton(QPushButton):
-    """Button with smooth hover and click animations."""
+class TweenButton(QPushButton):
+    """Button with smooth scale tweening animations on hover/press."""
     
     def __init__(self, text, parent=None):
         super().__init__(text, parent)
         self._scale_animation = None
-        self._shadow_animation = None
         self._shadow_effect = QGraphicsDropShadowEffect()
-        self._shadow_effect.setBlurRadius(15)
-        self._shadow_effect.setColor(QColor(0, 0, 0, 100))
+        self._shadow_effect.setBlurRadius(12)
+        self._shadow_effect.setColor(QColor(0, 0, 0, 140))
         self._shadow_effect.setOffset(0, 2)
         self.setGraphicsEffect(self._shadow_effect)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._original_height = self.height()
     
     def enterEvent(self, event):
         super().enterEvent(event)
-        self._animate_hover_in()
+        self._tween_scale(1.0, 1.08, 200)  # Scale up smoothly
     
     def leaveEvent(self, event):
         super().leaveEvent(event)
-        self._animate_hover_out()
+        if self._scale_animation and self._scale_animation.state() == self._scale_animation.Running:
+            self._scale_animation.stop()
+        self._tween_scale(self.scale(), 1.0, 150)  # Scale back down
     
-    def _animate_hover_in(self):
+    def mousePressEvent(self, event):
+        super().mousePressEvent(event)
+        self._tween_scale(self.scale(), 0.95, 100)  # Press down tween
+    
+    def mouseReleaseEvent(self, event):
+        super().mouseReleaseEvent(event)
+        self._tween_scale(self.scale(), 1.08 if self.underMouse() else 1.0, 150)
+    
+    def _tween_scale(self, start_scale, end_scale, duration):
+        """Animate scale from start to end using tweening."""
         if self._scale_animation and self._scale_animation.state() == self._scale_animation.Running:
             self._scale_animation.stop()
         
-        scale_up = QPropertyAnimation(self, b"geometry")
-        scale_up.setDuration(150)
-        scale_up.setEasingCurve(QEasingCurve.OutCubic)
+        # Create a custom property animation using a helper
+        self._scale_animation = QPropertyAnimation(self, b"windowOpacity")
+        self._scale_animation.setDuration(0)  # We'll handle timing manually
         
-        current_geo = self.geometry()
-        new_width = int(current_geo.width() * 1.02)
-        new_height = int(current_geo.height() * 1.05)
-        delta_w = (new_width - current_geo.width()) // 2
-        delta_h = (new_height - current_geo.height()) // 2
+        # Use a different approach: animate through scale values
+        class ScaleAnimHelper(QPropertyAnimation):
+            def __init__(self, button, start, end, duration):
+                super().__init__()
+                self.button = button
+                self.start_val = start
+                self.end_val = end
+                self.setDuration(duration)
+                self.setEasingCurve(QEasingCurve.OutCubic)
+                self.valueChanged.connect(self._on_value_changed)
+                self.setStartValue(0)
+                self.setEndValue(1)
+            
+            def _on_value_changed(self, val):
+                current_scale = self.start_val + (self.end_val - self.start_val) * val
+                # Use font size as proxy for scale
+                font = self.button.font()
+                base_size = 10
+                font.setPointSize(int(base_size * current_scale))
+                self.button.setFont(font)
+                
+                # Adjust padding
+                padding = int(10 * current_scale)
+                self.button.setStyleSheet(f"padding: {padding}px;")
         
-        scale_up.setStartValue(current_geo)
-        scale_up.setEndValue(QPoint(current_geo.x() - delta_w, current_geo.y() - delta_h).x())
-        
-        # Update shadow effect
-        shadow_anim = QPropertyAnimation(self._shadow_effect, b"blurRadius")
-        shadow_anim.setDuration(150)
-        shadow_anim.setEasingCurve(QEasingCurve.OutCubic)
-        shadow_anim.setStartValue(15)
-        shadow_anim.setEndValue(25)
-        shadow_anim.start()
-        self._shadow_animation = shadow_anim
-    
-    def _animate_hover_out(self):
-        if self._shadow_animation and self._shadow_animation.state() == self._shadow_animation.Running:
-            self._shadow_animation.stop()
-        
-        shadow_anim = QPropertyAnimation(self._shadow_effect, b"blurRadius")
-        shadow_anim.setDuration(150)
-        shadow_anim.setEasingCurve(QEasingCurve.OutCubic)
-        shadow_anim.setStartValue(25)
-        shadow_anim.setEndValue(15)
-        shadow_anim.start()
-        self._shadow_animation = shadow_anim
+        anim = ScaleAnimHelper(self, start_scale, end_scale, duration)
+        self._scale_animation = anim
+        anim.start()
 
 
 class FadeInAnimation:
