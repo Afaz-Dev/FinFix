@@ -35,6 +35,17 @@ except Exception:
 # App logo helpers (generated or assets/logo.png if available)
 from app_logo import get_app_icon, get_logo_pixmap
 
+# ============================================================================
+# ANIMATION SYSTEM - Smooth Tweening Animations
+# ============================================================================
+# TweenButton:       Smooth position + shadow blur tweening on hover/press
+# TweenListWidget:   Smooth scale tweening on list item hover
+# Card Entrance:     Smooth slide-in (left to right) + fade tween on startup
+# Input Focus:       CSS-based transitions for border & shadow
+# 
+# All animations use OutCubic easing for natural motion
+# ============================================================================
+
 DATA_DIR = Path.home() / ".finfix_data"
 LEGACY_DATA_DIR = Path("data")
 LEDGER_CSV = DATA_DIR / "transactions.csv"
@@ -193,77 +204,165 @@ QLabel#InfoText { color: #5F6368; font-size: 11px; background-color: transparent
 
 
 class TweenButton(QPushButton):
-    """Button with smooth scale tweening animations on hover/press."""
+    """Button with smooth scale/position tweening animations on hover/press."""
     
     def __init__(self, text, parent=None):
         super().__init__(text, parent)
-        self._scale_animation = None
-        self._shadow_effect = QGraphicsDropShadowEffect()
-        self._shadow_effect.setBlurRadius(12)
-        self._shadow_effect.setColor(QColor(0, 0, 0, 140))
-        self._shadow_effect.setOffset(0, 2)
-        self.setGraphicsEffect(self._shadow_effect)
+        self._anim = None
+        self._shadow = QGraphicsDropShadowEffect()
+        self._shadow.setBlurRadius(12)
+        self._shadow.setColor(QColor(0, 0, 0, 140))
+        self._shadow.setOffset(0, 2)
+        self.setGraphicsEffect(self._shadow)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._original_height = self.height()
+        self._orig_geometry = None
+    
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._orig_geometry = self.geometry()
     
     def enterEvent(self, event):
         super().enterEvent(event)
-        self._tween_scale(1.0, 1.08, 200)  # Scale up smoothly
+        if self._anim and self._anim.state() == self._anim.Running:
+            self._anim.stop()
+        
+        # Tween shadow blur
+        self._anim = QPropertyAnimation(self._shadow, b"blurRadius")
+        self._anim.setDuration(200)
+        self._anim.setEasingCurve(QEasingCurve.OutCubic)
+        self._anim.setStartValue(12)
+        self._anim.setEndValue(24)
+        
+        # Tween position (lift up)
+        pos_anim = QPropertyAnimation(self, b"geometry")
+        pos_anim.setDuration(200)
+        pos_anim.setEasingCurve(QEasingCurve.OutCubic)
+        pos_anim.setStartValue(self.geometry())
+        
+        if self._orig_geometry:
+            lifted = self._orig_geometry.translated(0, -4)
+            pos_anim.setEndValue(lifted)
+        
+        group = QParallelAnimationGroup()
+        group.addAnimation(self._anim)
+        group.addAnimation(pos_anim)
+        self._anim = group
+        self._anim.start()
     
     def leaveEvent(self, event):
         super().leaveEvent(event)
-        if self._scale_animation and self._scale_animation.state() == self._scale_animation.Running:
-            self._scale_animation.stop()
-        self._tween_scale(self.scale(), 1.0, 150)  # Scale back down
+        if self._anim and self._anim.state() == self._anim.Running:
+            self._anim.stop()
+        
+        self._anim = QPropertyAnimation(self._shadow, b"blurRadius")
+        self._anim.setDuration(150)
+        self._anim.setEasingCurve(QEasingCurve.OutCubic)
+        self._anim.setStartValue(24)
+        self._anim.setEndValue(12)
+        
+        pos_anim = QPropertyAnimation(self, b"geometry")
+        pos_anim.setDuration(150)
+        pos_anim.setEasingCurve(QEasingCurve.OutCubic)
+        
+        if self._orig_geometry:
+            pos_anim.setStartValue(self.geometry())
+            pos_anim.setEndValue(self._orig_geometry)
+        
+        group = QParallelAnimationGroup()
+        group.addAnimation(self._anim)
+        group.addAnimation(pos_anim)
+        self._anim = group
+        self._anim.start()
     
     def mousePressEvent(self, event):
+        if self._anim and self._anim.state() == self._anim.Running:
+            self._anim.stop()
+        
+        self._anim = QPropertyAnimation(self, b"geometry")
+        self._anim.setDuration(100)
+        self._anim.setEasingCurve(QEasingCurve.OutCubic)
+        self._anim.setStartValue(self.geometry())
+        
+        if self._orig_geometry:
+            pressed = self._orig_geometry.translated(1, 2)
+            self._anim.setEndValue(pressed)
+        
+        self._anim.start()
         super().mousePressEvent(event)
-        self._tween_scale(self.scale(), 0.95, 100)  # Press down tween
     
     def mouseReleaseEvent(self, event):
+        if self._anim and self._anim.state() == self._anim.Running:
+            self._anim.stop()
+        
+        self._anim = QPropertyAnimation(self, b"geometry")
+        self._anim.setDuration(100)
+        self._anim.setEasingCurve(QEasingCurve.OutCubic)
+        self._anim.setStartValue(self.geometry())
+        
+        if self._orig_geometry and self.underMouse():
+            lifted = self._orig_geometry.translated(0, -4)
+            self._anim.setEndValue(lifted)
+        elif self._orig_geometry:
+            self._anim.setEndValue(self._orig_geometry)
+        
+        self._anim.start()
         super().mouseReleaseEvent(event)
-        self._tween_scale(self.scale(), 1.08 if self.underMouse() else 1.0, 150)
+
+
+
+class TweenListWidget(QListWidget):
+    """List widget with smooth scale tweening on item hover."""
     
-    def _tween_scale(self, start_scale, end_scale, duration):
-        """Animate scale from start to end using tweening."""
-        if self._scale_animation and self._scale_animation.state() == self._scale_animation.Running:
-            self._scale_animation.stop()
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._item_anims = {}  # Track animations per item
+        self.setMouseTracking(True)
+    
+    def mouseMoveEvent(self, event):
+        super().mouseMoveEvent(event)
+        item = self.itemAt(event.pos())
         
-        # Create a custom property animation using a helper
-        self._scale_animation = QPropertyAnimation(self, b"windowOpacity")
-        self._scale_animation.setDuration(0)  # We'll handle timing manually
+        # Reset all items first
+        for idx in range(self.count()):
+            self._tween_item_size(idx, 1.0, 150)
         
-        # Use a different approach: animate through scale values
-        class ScaleAnimHelper(QPropertyAnimation):
-            def __init__(self, button, start, end, duration):
-                super().__init__()
-                self.button = button
-                self.start_val = start
-                self.end_val = end
-                self.setDuration(duration)
-                self.setEasingCurve(QEasingCurve.OutCubic)
-                self.valueChanged.connect(self._on_value_changed)
-                self.setStartValue(0)
-                self.setEndValue(1)
-            
-            def _on_value_changed(self, val):
-                current_scale = self.start_val + (self.end_val - self.start_val) * val
-                # Use font size as proxy for scale
-                font = self.button.font()
-                base_size = 10
-                font.setPointSize(int(base_size * current_scale))
-                self.button.setFont(font)
-                
-                # Adjust padding
-                padding = int(10 * current_scale)
-                self.button.setStyleSheet(f"padding: {padding}px;")
+        # Tween hovered item
+        if item:
+            idx = self.row(item)
+            self._tween_item_size(idx, 1.06, 200)
+    
+    def leaveEvent(self, event):
+        super().leaveEvent(event)
+        for idx in range(self.count()):
+            self._tween_item_size(idx, 1.0, 150)
+    
+    def _tween_item_size(self, row, scale, duration):
+        """Smooth scale tween for list item."""
+        if row < 0 or row >= self.count():
+            return
         
-        anim = ScaleAnimHelper(self, start_scale, end_scale, duration)
-        self._scale_animation = anim
+        item = self.item(row)
+        if not item:
+            return
+        
+        # Use height as scale proxy
+        base_height = 30
+        target_height = int(base_height * scale)
+        
+        anim = QPropertyAnimation(item, b"sizeHint")
+        anim.setDuration(duration)
+        anim.setEasingCurve(QEasingCurve.OutCubic)
+        anim.setStartValue(QSize(0, item.sizeHint().height()))
+        anim.setEndValue(QSize(0, target_height))
+        
+        if row in self._item_anims:
+            old_anim = self._item_anims[row]
+            if old_anim.state() == old_anim.Running:
+                old_anim.stop()
+        
+        self._item_anims[row] = anim
         anim.start()
 
-
-class FadeInAnimation:
     """Helper class to fade in widgets smoothly."""
     
     @staticmethod
@@ -1173,21 +1272,37 @@ class BudgetTracker(QMainWindow):
         QTimer.singleShot(100, self._animate_entrance)
 
     def _animate_entrance(self):
-        """Animate card entrance with smooth fade and slide effects."""
+        """Animate card entrance with smooth slide-in + fade tweens."""
         cards = getattr(self, 'card_frames', [])
         for idx, card in enumerate(cards):
-            # Fade-in animation
+            # Slide-in from left + fade tween
+            pos_anim = QPropertyAnimation(card, b"geometry")
+            pos_anim.setDuration(500)
+            pos_anim.setEasingCurve(QEasingCurve.OutCubic)
+            
+            start_geo = card.geometry()
+            slide_start = start_geo.translated(-100, 0)  # Start 100px left
+            
+            pos_anim.setStartValue(slide_start)
+            pos_anim.setEndValue(start_geo)
+            
+            # Fade tween
             effect = QGraphicsOpacityEffect()
             card.setGraphicsEffect(effect)
+            fade_anim = QPropertyAnimation(effect, b"opacity")
+            fade_anim.setDuration(500)
+            fade_anim.setEasingCurve(QEasingCurve.OutQuad)
+            fade_anim.setStartValue(0.0)
+            fade_anim.setEndValue(1.0)
             
-            anim = QPropertyAnimation(effect, b"opacity")
-            anim.setDuration(400)
-            anim.setStartValue(0.0)
-            anim.setEndValue(1.0)
-            anim.setEasingCurve(QEasingCurve.OutQuad)
+            # Combine animations
+            group = QParallelAnimationGroup()
+            group.addAnimation(pos_anim)
+            group.addAnimation(fade_anim)
             
-            # Stagger animations for each card
-            QTimer.singleShot(idx * 80, anim.start)
+            # Stagger the start
+            QTimer.singleShot(idx * 100, group.start)
+
 
     def show_error_popup(self, title, message):
         msg = QMessageBox()
