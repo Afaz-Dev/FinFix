@@ -4,10 +4,10 @@ from PyQt5.QtWidgets import (
     QComboBox, QPlainTextEdit, QFileDialog, QDialog, QFrame, QDialogButtonBox,
     QWhatsThis, QSizePolicy, QScrollArea, QMainWindow, QMenuBar, QMenu, QAction, QStatusBar,
     QTableWidget, QTableWidgetItem, QAbstractItemView, QProgressBar, QHeaderView, QShortcut,
-    QGridLayout, QCheckBox, QFormLayout, QInputDialog
+    QGridLayout, QCheckBox, QFormLayout, QInputDialog, QGraphicsOpacityEffect
 )
 from PyQt5.QtGui import QColor, QFont, QDoubleValidator, QHelpEvent, QKeySequence, QPainter, QDrag
-from PyQt5.QtCore import Qt, QEvent, QPoint, QByteArray, QMimeData, pyqtSignal
+from PyQt5.QtCore import Qt, QEvent, QPoint, QByteArray, QMimeData, pyqtSignal, QPropertyAnimation, QEasingCurve, QTimer, QSequentialAnimationGroup, QParallelAnimationGroup, QSize
 from PyQt5.QtPrintSupport import QPrinter
 from typing import cast
 from decimal import Decimal, ROUND_HALF_UP
@@ -86,85 +86,189 @@ FALLBACK_NAMES = {
 
 DARK_STYLESHEET = """
 QWidget { background-color: #121212; color: #E0E0E0; font-family: 'Segoe UI'; }
-QLineEdit { background-color: #1E1E1E; border: 2px solid #333333; border-radius: 8px; padding: 6px; color: #E0E0E0; }
+QLineEdit { background-color: #1E1E1E; border: 2px solid #333333; border-radius: 8px; padding: 6px; color: #E0E0E0; transition: all 0.2s; }
+QLineEdit:focus { border: 2px solid #6366f1; box-shadow: 0 0 12px rgba(99, 102, 241, 0.3); }
 QListWidget { background-color: #1C1C1C; border: 1px solid #333333; border-radius: 8px; font-family: 'Consolas', 'Cascadia Mono', monospace; }
-QListWidget::item { padding: 6px 8px; border-bottom: 1px solid #2C2C34; }
+QListWidget::item { padding: 6px 8px; border-bottom: 1px solid #2C2C34; transition: all 0.15s; }
+QListWidget::item:hover { background-color: #252530; }
 QListWidget::item:alternate { background-color: #1F1F26; }
 QListWidget::item:last { border-bottom: none; }
 QListWidget::item:selected { background-color: #314261; color: #FFFFFF; }
 QListWidget::item:selected:!active { background-color: #2C3B58; color: #FFFFFF; }
-QPushButton#themeButton { background-color: #323232; border: 1px solid #4A4A4A; border-radius: 8px; padding: 6px 12px; color: #E0E0E0; }
-QPushButton#themeButton:hover { background-color: #3C3C3C; }
-QPlainTextEdit { background-color: #1E1E1E; border: 1px solid #333333; border-radius: 8px; padding: 6px; color: #E0E0E0; }
-QComboBox { background-color: #1E1E1E; border: 2px solid #333333; border-radius: 8px; padding: 6px; color: #E0E0E0; }
+QPushButton#themeButton { background-color: #323232; border: 1px solid #4A4A4A; border-radius: 8px; padding: 6px 12px; color: #E0E0E0; transition: all 0.2s ease-out; }
+QPushButton#themeButton:hover { background-color: #3C3C3C; border: 1px solid #6366f1; }
+QPushButton#themeButton:pressed { transform: scale(0.98); }
+QPlainTextEdit { background-color: #1E1E1E; border: 1px solid #333333; border-radius: 8px; padding: 6px; color: #E0E0E0; transition: all 0.2s; }
+QPlainTextEdit:focus { border: 1px solid #6366f1; }
+QComboBox { background-color: #1E1E1E; border: 2px solid #333333; border-radius: 8px; padding: 6px; color: #E0E0E0; transition: all 0.2s; }
+QComboBox:focus { border: 2px solid #6366f1; }
+QComboBox:hover { border: 2px solid #4A4A6A; }
 QFrame#HeaderBar { background-color: #1D1D28; border-radius: 18px; }
 QLabel#Title { font-size: 18px; font-weight: 600; background-color: transparent; }
 QLabel#Subtitle { color: #B0BEC5; font-size: 12px; background-color: transparent; }
-QLabel#BalanceValue { background-color: #1E3A29; border-radius: 14px; padding: 8px 14px; font-size: 14px; font-weight: 600; color: #A5D6A7; }
-QFrame#Card { background-color: #1A1A1F; border: 1px solid #2C2C34; border-radius: 16px; }
+QLabel#BalanceValue { background-color: #1E3A29; border-radius: 14px; padding: 8px 14px; font-size: 14px; font-weight: 600; color: #A5D6A7; transition: all 0.3s; }
+QFrame#Card { background-color: #1A1A1F; border: 1px solid #2C2C34; border-radius: 16px; transition: all 0.3s; }
+QFrame#Card:hover { border: 1px solid #404050; }
 QFrame#ActionBar { background-color: #16161C; border: 1px solid #2C2C34; border-radius: 12px; }
 QFrame#SummaryBubble { background-color: #1C1C21; border: 1px solid #2C2C34; border-radius: 14px; }
 QLabel#SummaryText { color: #E0E0E0; font-size: 12px; background-color: transparent; }
 QLabel#SummaryCaption { color: #CFD8DC; font-size: 12px; background-color: transparent; }
 QLabel#SectionTitle { font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: #9FA8DA; background-color: transparent; }
-QFrame#SummaryKPI { background-color: #24242E; border: 1px solid #343447; border-radius: 12px; }
+QFrame#SummaryKPI { background-color: #24242E; border: 1px solid #343447; border-radius: 12px; transition: all 0.2s; }
+QFrame#SummaryKPI:hover { border: 1px solid #4A4A60; }
 QLabel#SummaryKPIHeader { font-size: 12px; font-weight: 600; color: #9FA8DA; }
 QLabel#SummaryKPIValue { font-size: 18px; font-weight: 700; color: #FFFFFF; }
 QLabel#SummaryKPIDelta { font-size: 12px; color: #B0BEC5; }
-QFrame#SummarySubCard { background-color: #1F1F26; border: 1px solid #2E2E38; border-radius: 12px; }
+QFrame#SummarySubCard { background-color: #1F1F26; border: 1px solid #2E2E38; border-radius: 12px; transition: all 0.2s; }
+QFrame#SummarySubCard:hover { border: 1px solid #404050; }
 QTableWidget#SummaryTable { background-color: #1E1E24; border: 1px solid #2C2C34; border-radius: 10px; gridline-color: #2C2C34; }
-QTableWidget#SummaryTable::item { padding: 6px; font-size: 12px; background-color: #1E1E24; color: #E0E0E0; }
+QTableWidget#SummaryTable::item { padding: 6px; font-size: 12px; background-color: #1E1E24; color: #E0E0E0; transition: all 0.15s; }
+QTableWidget#SummaryTable::item:hover { background-color: #262631; }
 QTableWidget#SummaryTable::item:alternate { background-color: #262631; }
 QTableWidget#SummaryTable::item:selected { background-color: #2F3B59; color: #FFFFFF; }
 QTableWidget#SummaryTable QHeaderView::section { background-color: #252532; color: #E0E0E0; font-size: 12px; padding: 6px; border: none; }
 QListWidget#SummaryAlerts { background-color: #1E1E24; border: 1px solid #2C2C34; border-radius: 10px; padding: 6px; font-family: 'Segoe UI'; }
-QListWidget#SummaryAlerts::item { border-bottom: 1px solid #2C2C34; padding: 6px 4px; }
+QListWidget#SummaryAlerts::item { border-bottom: 1px solid #2C2C34; padding: 6px 4px; transition: all 0.15s; }
+QListWidget#SummaryAlerts::item:hover { background-color: #252530; }
 QListWidget#SummaryAlerts::item:last { border-bottom: none; }
-QPushButton#SecondaryButton { background-color: #2A2A33; border: 1px solid #3A3A45; border-radius: 10px; padding: 9px 12px; font-weight: 600; color: #F5F5F5; }
-QPushButton#SecondaryButton:hover { background-color: #353543; }
+QPushButton#SecondaryButton { background-color: #2A2A33; border: 1px solid #3A3A45; border-radius: 10px; padding: 9px 12px; font-weight: 600; color: #F5F5F5; transition: all 0.2s ease-out; }
+QPushButton#SecondaryButton:hover { background-color: #353543; border: 1px solid #4A5A6A; transform: translateY(-2px); }
+QPushButton#SecondaryButton:pressed { transform: translateY(0px); }
 QLabel#InfoText { color: #B0BEC5; font-size: 11px; background-color: transparent; }
 """.strip()
 
 LIGHT_STYLESHEET = """
 QWidget { background-color: #F5F5F5; color: #212121; font-family: 'Segoe UI'; }
-QLineEdit { background-color: #FFFFFF; border: 2px solid #D0D0D0; border-radius: 8px; padding: 6px; color: #212121; }
+QLineEdit { background-color: #FFFFFF; border: 2px solid #D0D0D0; border-radius: 8px; padding: 6px; color: #212121; transition: all 0.2s; }
+QLineEdit:focus { border: 2px solid #6366f1; box-shadow: 0 0 12px rgba(99, 102, 241, 0.2); }
 QListWidget { background-color: #FFFFFF; border: 1px solid #D0D0D0; border-radius: 8px; font-family: 'Consolas', 'Cascadia Mono', monospace; }
-QListWidget::item { padding: 6px 8px; border-bottom: 1px solid #E0E0E0; }
+QListWidget::item { padding: 6px 8px; border-bottom: 1px solid #E0E0E0; transition: all 0.15s; }
+QListWidget::item:hover { background-color: #F0F3FF; }
 QListWidget::item:alternate { background-color: #F4F7FF; }
 QListWidget::item:selected { background-color: #CCE0FF; color: #102A43; }
 QListWidget::item:selected:!active { background-color: #D7E6FF; color: #102A43; }
 QListWidget::item:last { border-bottom: none; }
-QPushButton#themeButton { background-color: #E0E0E0; border: 1px solid #BDBDBD; border-radius: 8px; padding: 6px 12px; color: #212121; }
-QPushButton#themeButton:hover { background-color: #D5D5D5; }
-QPlainTextEdit { background-color: #FFFFFF; border: 1px solid #D0D0D0; border-radius: 8px; padding: 6px; color: #212121; }
-QComboBox { background-color: #FFFFFF; border: 2px solid #D0D0D0; border-radius: 8px; padding: 6px; color: #212121; }
-QFrame#HeaderBar { background-color: #FFFFFF; border-radius: 18px; border: 1px solid #E0E0E0; }
+QPushButton#themeButton { background-color: #E0E0E0; border: 1px solid #BDBDBD; border-radius: 8px; padding: 6px 12px; color: #212121; transition: all 0.2s ease-out; }
+QPushButton#themeButton:hover { background-color: #D5D5D5; border: 1px solid #6366f1; }
+QPushButton#themeButton:pressed { transform: scale(0.98); }
+QPlainTextEdit { background-color: #FFFFFF; border: 1px solid #D0D0D0; border-radius: 8px; padding: 6px; color: #212121; transition: all 0.2s; }
+QPlainTextEdit:focus { border: 1px solid #6366f1; }
+QComboBox { background-color: #FFFFFF; border: 2px solid #D0D0D0; border-radius: 8px; padding: 6px; color: #212121; transition: all 0.2s; }
+QComboBox:focus { border: 2px solid #6366f1; }
+QComboBox:hover { border: 2px solid #B0B0D0; }
+QFrame#HeaderBar { background-color: #FFFFFF; border-radius: 18px; border: 1px solid #E0E0E0; transition: all 0.2s; }
+QFrame#HeaderBar:hover { border: 1px solid #D0D0D0; }
 QLabel#Title { font-size: 18px; font-weight: 600; color: #1B5E20; background-color: transparent; }
 QLabel#Subtitle { color: #5F6368; font-size: 12px; background-color: transparent; }
-QLabel#BalanceValue { background-color: #E8F5E9; border-radius: 14px; padding: 8px 14px; font-size: 14px; font-weight: 600; color: #2E7D32; }
-QFrame#Card { background-color: #FFFFFF; border: 1px solid #E0E0E0; border-radius: 16px; }
+QLabel#BalanceValue { background-color: #E8F5E9; border-radius: 14px; padding: 8px 14px; font-size: 14px; font-weight: 600; color: #2E7D32; transition: all 0.3s; }
+QFrame#Card { background-color: #FFFFFF; border: 1px solid #E0E0E0; border-radius: 16px; transition: all 0.3s; }
+QFrame#Card:hover { border: 1px solid #D0D0D0; }
 QFrame#ActionBar { background-color: rgba(255, 255, 255, 0.85); border: 1px solid #DADADA; border-radius: 12px; }
 QFrame#SummaryBubble { background-color: #F9F9F9; border: 1px solid #D6D6D6; border-radius: 14px; }
 QLabel#SummaryText { color: #212121; font-size: 12px; background-color: transparent; }
 QLabel#SummaryCaption { color: #455A64; font-size: 12px; background-color: transparent; }
 QLabel#SectionTitle { font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: #3949AB; background-color: transparent; }
-QFrame#SummaryKPI { background-color: #FFFFFF; border: 1px solid #DADFE6; border-radius: 12px; }
+QFrame#SummaryKPI { background-color: #FFFFFF; border: 1px solid #DADFE6; border-radius: 12px; transition: all 0.2s; }
+QFrame#SummaryKPI:hover { border: 1px solid #C0CADB; }
 QLabel#SummaryKPIHeader { font-size: 12px; font-weight: 600; color: #5F6368; }
 QLabel#SummaryKPIValue { font-size: 18px; font-weight: 700; color: #1B5E20; }
 QLabel#SummaryKPIDelta { font-size: 12px; color: #546E7A; }
-QFrame#SummarySubCard { background-color: #FFFFFF; border: 1px solid #DADFE6; border-radius: 12px; }
+QFrame#SummarySubCard { background-color: #FFFFFF; border: 1px solid #DADFE6; border-radius: 12px; transition: all 0.2s; }
+QFrame#SummarySubCard:hover { border: 1px solid #C0CADB; }
 QTableWidget#SummaryTable { background-color: #FFFFFF; border: 1px solid #D6D6D6; border-radius: 10px; gridline-color: #E0E0E0; }
-QTableWidget#SummaryTable::item { padding: 6px; font-size: 12px; background-color: #FFFFFF; color: #212121; }
+QTableWidget#SummaryTable::item { padding: 6px; font-size: 12px; background-color: #FFFFFF; color: #212121; transition: all 0.15s; }
+QTableWidget#SummaryTable::item:hover { background-color: #F8FAFE; }
 QTableWidget#SummaryTable::item:alternate { background-color: #F4F6FB; }
 QTableWidget#SummaryTable::item:selected { background-color: #D9E4FF; color: #1A237E; }
 QTableWidget#SummaryTable QHeaderView::section { background-color: #ECEFF1; color: #37474F; font-size: 12px; padding: 6px; border: none; }
 QListWidget#SummaryAlerts { background-color: #FFFFFF; border: 1px solid #D6D6D6; border-radius: 10px; padding: 6px; font-family: 'Segoe UI'; }
-QListWidget#SummaryAlerts::item { border-bottom: 1px solid #E0E0E0; padding: 6px 4px; }
+QListWidget#SummaryAlerts::item { border-bottom: 1px solid #E0E0E0; padding: 6px 4px; transition: all 0.15s; }
+QListWidget#SummaryAlerts::item:hover { background-color: #F8FAFE; }
 QListWidget#SummaryAlerts::item:last { border-bottom: none; }
-QPushButton#SecondaryButton { background-color: #F0F0F0; border: 1px solid #D0D0D0; border-radius: 10px; padding: 9px 12px; font-weight: 600; color: #1F1F1F; }
-QPushButton#SecondaryButton:hover { background-color: #E4E4E4; }
+QPushButton#SecondaryButton { background-color: #F0F0F0; border: 1px solid #D0D0D0; border-radius: 10px; padding: 9px 12px; font-weight: 600; color: #1F1F1F; transition: all 0.2s ease-out; }
+QPushButton#SecondaryButton:hover { background-color: #E4E4E4; border: 1px solid #6366f1; transform: translateY(-2px); }
+QPushButton#SecondaryButton:pressed { transform: translateY(0px); }
 QLabel#InfoText { color: #5F6368; font-size: 11px; background-color: transparent; }
 """.strip()
+
+
+class AnimatedButton(QPushButton):
+    """Button with smooth hover and click animations."""
+    
+    def __init__(self, text, parent=None):
+        super().__init__(text, parent)
+        self._scale_animation = None
+        self._shadow_animation = None
+        self._shadow_effect = QGraphicsDropShadowEffect()
+        self._shadow_effect.setBlurRadius(15)
+        self._shadow_effect.setColor(QColor(0, 0, 0, 100))
+        self._shadow_effect.setOffset(0, 2)
+        self.setGraphicsEffect(self._shadow_effect)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+    
+    def enterEvent(self, event):
+        super().enterEvent(event)
+        self._animate_hover_in()
+    
+    def leaveEvent(self, event):
+        super().leaveEvent(event)
+        self._animate_hover_out()
+    
+    def _animate_hover_in(self):
+        if self._scale_animation and self._scale_animation.state() == self._scale_animation.Running:
+            self._scale_animation.stop()
+        
+        scale_up = QPropertyAnimation(self, b"geometry")
+        scale_up.setDuration(150)
+        scale_up.setEasingCurve(QEasingCurve.OutCubic)
+        
+        current_geo = self.geometry()
+        new_width = int(current_geo.width() * 1.02)
+        new_height = int(current_geo.height() * 1.05)
+        delta_w = (new_width - current_geo.width()) // 2
+        delta_h = (new_height - current_geo.height()) // 2
+        
+        scale_up.setStartValue(current_geo)
+        scale_up.setEndValue(QPoint(current_geo.x() - delta_w, current_geo.y() - delta_h).x())
+        
+        # Update shadow effect
+        shadow_anim = QPropertyAnimation(self._shadow_effect, b"blurRadius")
+        shadow_anim.setDuration(150)
+        shadow_anim.setEasingCurve(QEasingCurve.OutCubic)
+        shadow_anim.setStartValue(15)
+        shadow_anim.setEndValue(25)
+        shadow_anim.start()
+        self._shadow_animation = shadow_anim
+    
+    def _animate_hover_out(self):
+        if self._shadow_animation and self._shadow_animation.state() == self._shadow_animation.Running:
+            self._shadow_animation.stop()
+        
+        shadow_anim = QPropertyAnimation(self._shadow_effect, b"blurRadius")
+        shadow_anim.setDuration(150)
+        shadow_anim.setEasingCurve(QEasingCurve.OutCubic)
+        shadow_anim.setStartValue(25)
+        shadow_anim.setEndValue(15)
+        shadow_anim.start()
+        self._shadow_animation = shadow_anim
+
+
+class FadeInAnimation:
+    """Helper class to fade in widgets smoothly."""
+    
+    @staticmethod
+    def fade_in_widget(widget: QWidget, duration: int = 300):
+        effect = QGraphicsOpacityEffect()
+        widget.setGraphicsEffect(effect)
+        
+        anim = QPropertyAnimation(effect, b"opacity")
+        anim.setDuration(duration)
+        anim.setStartValue(0.0)
+        anim.setEndValue(1.0)
+        anim.setEasingCurve(QEasingCurve.InOutQuad)
+        anim.start()
+        return anim
+
 
 class FloatingConverterWindow(QWidget):
     closed = pyqtSignal()
@@ -1041,6 +1145,12 @@ class BudgetTracker(QMainWindow):
         self.edit_transaction_btn.clicked.connect(self.edit_selected_transaction)
         self.delete_btn.clicked.connect(self.delete_selected_transaction)
 
+        # Enhance all secondary buttons with shadow effects
+        for btn in [self.add_budget_btn, self.use_savings_btn, self.edit_transaction_btn, 
+                    self.delete_btn, self.export_btn, self.chart_btn, self.expense_chart_btn,
+                    self.currency_convert_btn, self.currency_update_btn]:
+            self.enhance_button_with_shadow(btn, blur_radius=12)
+
         self.refresh_currency_options()
         self.apply_theme()
         self.load_ledger()
@@ -1048,6 +1158,26 @@ class BudgetTracker(QMainWindow):
         self.refresh_category_options()
         self.update_balance()
         self.update_summary()
+        
+        # Add smooth entrance animations
+        QTimer.singleShot(100, self._animate_entrance)
+
+    def _animate_entrance(self):
+        """Animate card entrance with smooth fade and slide effects."""
+        cards = getattr(self, 'card_frames', [])
+        for idx, card in enumerate(cards):
+            # Fade-in animation
+            effect = QGraphicsOpacityEffect()
+            card.setGraphicsEffect(effect)
+            
+            anim = QPropertyAnimation(effect, b"opacity")
+            anim.setDuration(400)
+            anim.setStartValue(0.0)
+            anim.setEndValue(1.0)
+            anim.setEasingCurve(QEasingCurve.OutQuad)
+            
+            # Stagger animations for each card
+            QTimer.singleShot(idx * 80, anim.start)
 
     def show_error_popup(self, title, message):
         msg = QMessageBox()
@@ -1282,18 +1412,50 @@ class BudgetTracker(QMainWindow):
 
     def createGradientButton(self, text, color1, color2):
         btn = QPushButton(text)
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.setStyleSheet(f"""
             QPushButton {{
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {color1}, stop:1 {color2});
-                border: none; color: white; border-radius: 10px; padding: 8px 15px;
-                font-weight: bold; font-size: 12pt;
+                border: none; 
+                color: white; 
+                border-radius: 10px; 
+                padding: 10px 16px;
+                font-weight: bold; 
+                font-size: 12pt;
+                transition: all 0.2s ease-out;
             }}
-            QPushButton:hover {{ opacity: 0.9; }}
+            QPushButton:hover {{ 
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {self._lighten_color(color1)}, stop:1 {self._lighten_color(color2)});
+                padding: 9px 16px;
+            }}
+            QPushButton:pressed {{ 
+                padding: 11px 16px;
+            }}
         """)
-        shadow = QGraphicsDropShadowEffect(); shadow.setBlurRadius(20)
-        shadow.setColor(QColor(0,0,0,160)); shadow.setOffset(0,3)
+        
+        # Enhanced shadow effect
+        shadow = QGraphicsDropShadowEffect()
+        shadow.setBlurRadius(20)
+        shadow.setColor(QColor(0, 0, 0, 180))
+        shadow.setOffset(0, 4)
         btn.setGraphicsEffect(shadow)
         return btn
+    
+    def _lighten_color(self, hex_color):
+        """Lighten a hex color by 15%."""
+        hex_color = hex_color.lstrip('#')
+        rgb = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+        lightened = tuple(min(255, int(c * 1.15)) for c in rgb)
+        return f"#{lightened[0]:02x}{lightened[1]:02x}{lightened[2]:02x}"
+    
+    def enhance_button_with_shadow(self, button: QPushButton, blur_radius: int = 18):
+        """Add shadow and smooth hover effects to any button."""
+        shadow = QGraphicsDropShadowEffect()
+        shadow.setBlurRadius(blur_radius)
+        shadow.setColor(QColor(0, 0, 0, 140))
+        shadow.setOffset(0, 2)
+        button.setGraphicsEffect(shadow)
+        button.setCursor(Qt.CursorShape.PointingHandCursor)
 
     def _progress_stylesheet(self, chunk_color: str, disabled: bool = False) -> str:
         dark = self.theme_mode == "dark"
