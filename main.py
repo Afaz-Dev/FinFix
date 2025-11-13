@@ -1744,7 +1744,9 @@ class BudgetTracker(QMainWindow):
             tx_id = tx["tx_id"] or "-"
             display_amount = abs(tx["amount"])
             display = f"{tx['date']} | {tx['category']} | {sign} RM{display_amount:.2f} | {tx['desc']}  ({tx_id})"
-            self.transaction_list.addItem(display)
+            item = QListWidgetItem(display)
+            self.transaction_list.addItem(item)
+            self._animate_new_item(item)
         self.refresh_period_controls()
         self.update_reclass_ui(self.transaction_list.currentRow())
         self.update_use_savings_button()
@@ -3237,23 +3239,18 @@ class BudgetTracker(QMainWindow):
             bg = "#E8F5E9" if positive else "#FDE0DC"
         self.balance_label.setText(f"{arrow} Net Position: RM {self.balance:.2f}")
         
-        # Smooth color tween animation on balance change
-        self._animate_label_change(self.balance_label, fg, bg)
+        # Apply color immediately with pulse animation
+        self.balance_label.setStyleSheet(f"color: {fg}; background-color: {bg}; padding: 8px; border-radius: 6px;")
+        self._animate_label_change(self.balance_label)
     
-    def _animate_label_change(self, label, target_fg, target_bg):
-        """Smoothly tween label color changes."""
+    def _animate_label_change(self, label):
+        """Smooth pulse animation on balance update."""
         effect = QGraphicsOpacityEffect()
         label.setGraphicsEffect(effect)
         
-        # Slight blink/highlight effect on balance update
-        anim = QPropertyAnimation(effect, b"opacity")
-        anim.setDuration(400)
-        anim.setEasingCurve(QEasingCurve.InOutQuad)
-        anim.setStartValue(1.0)
-        anim.setEndValue(1.0)
-        
-        # Quick visual pulse
+        # Quick visual pulse: 1.0 -> 0.6 -> 1.0
         seq = QSequentialAnimationGroup()
+        
         pulse1 = QPropertyAnimation(effect, b"opacity")
         pulse1.setDuration(150)
         pulse1.setEasingCurve(QEasingCurve.OutQuad)
@@ -3268,23 +3265,32 @@ class BudgetTracker(QMainWindow):
         
         seq.addAnimation(pulse1)
         seq.addAnimation(pulse2)
+        
+        # Store animation to prevent garbage collection
+        self._balance_anim = seq
         seq.start()
     
     def _animate_new_item(self, item: QListWidgetItem):
-        """Smooth slide-in animation for newly added list items."""
-        # Quick fade-in pulse
-        effect = QGraphicsOpacityEffect()
-        item.setData(Qt.ItemDataRole.UserRole + 1, effect)
+        """Smooth highlight animation for newly added list items."""
+        # Animate background color from highlight to normal
+        import random
+        anim_id = f"_list_anim_{random.randint(0, 999999)}"
         
-        anim = QSequentialAnimationGroup()
-        fade_in = QPropertyAnimation(effect, b"opacity")
-        fade_in.setDuration(300)
-        fade_in.setEasingCurve(QEasingCurve.OutQuad)
-        fade_in.setStartValue(0.0)
-        fade_in.setEndValue(1.0)
+        def animate_highlight():
+            colors = [
+                "rgba(99, 102, 241, 60)",   # Start: indigo highlight
+                "rgba(99, 102, 241, 40)",
+                "rgba(99, 102, 241, 20)",
+                "rgba(99, 102, 241, 0)"     # End: transparent
+            ]
+            
+            for i, color in enumerate(colors):
+                QTimer.singleShot(i * 75, lambda c=color: item.setBackground(QColor(c)))
         
-        anim.addAnimation(fade_in)
-        anim.start()
+        animate_highlight()
+        
+        # Store reference to prevent garbage collection
+        setattr(self, anim_id, item)
     
     def _animate_table_row(self, table, row, delay_ms):
         """Highlight table row with staggered indigo tint."""
@@ -3368,6 +3374,7 @@ class BudgetTracker(QMainWindow):
 
     def update_titlebar_theme(self):
         self._apply_titlebar_palette(self)
+
 
 
 
