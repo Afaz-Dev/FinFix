@@ -6,10 +6,43 @@ from PyQt5.QtWidgets import (
     QTableWidget, QTableWidgetItem, QAbstractItemView, QProgressBar, QHeaderView, QShortcut,
     QGridLayout, QCheckBox, QFormLayout, QInputDialog, QGraphicsOpacityEffect
 )
-from PyQt5.QtGui import QColor, QFont, QDoubleValidator, QHelpEvent, QKeySequence, QPainter, QDrag
-from PyQt5.QtCore import Qt, QEvent, QPoint, QByteArray, QMimeData, pyqtSignal, QPropertyAnimation, QEasingCurve, QTimer, QSequentialAnimationGroup, QParallelAnimationGroup, QSize
+from PyQt5.QtGui import (
+    QColor,
+    QFont,
+    QDoubleValidator,
+    QHelpEvent,
+    QKeySequence,
+    QPainter,
+    QDrag,
+    QMouseEvent,
+    QShowEvent,
+    QCloseEvent,
+    QResizeEvent,
+    QMoveEvent,
+    QDragEnterEvent,
+    QDragMoveEvent,
+    QDropEvent,
+)
+from PyQt5.QtCore import (
+    Qt,
+    QEvent,
+    QPoint,
+    QByteArray,
+    QMimeData,
+    pyqtSignal,
+    QPropertyAnimation,
+    QEasingCurve,
+    QTimer,
+    QSequentialAnimationGroup,
+    QParallelAnimationGroup,
+    QSize,
+    QAbstractAnimation,
+    QObject,
+    QRect,
+    QVariantAnimation,
+)
 from PyQt5.QtPrintSupport import QPrinter
-from typing import cast
+from typing import Dict, Optional, cast
 from decimal import Decimal, ROUND_HALF_UP
 from collections import defaultdict
 from datetime import date, timedelta
@@ -208,22 +241,24 @@ class TweenButton(QPushButton):
     
     def __init__(self, text, parent=None):
         super().__init__(text, parent)
-        self._anim = None
+        self._anim: Optional[QAbstractAnimation] = None
         self._shadow = QGraphicsDropShadowEffect()
         self._shadow.setBlurRadius(12)
         self._shadow.setColor(QColor(0, 0, 0, 140))
         self._shadow.setOffset(0, 2)
         self.setGraphicsEffect(self._shadow)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._orig_geometry = None
+        self._orig_geometry: Optional[QRect] = None
     
-    def showEvent(self, event):
+    def showEvent(self, a0: QShowEvent) -> None:
+        event = a0
         super().showEvent(event)
         self._orig_geometry = self.geometry()
     
-    def enterEvent(self, event):
+    def enterEvent(self, a0: QEvent) -> None:
+        event = a0
         super().enterEvent(event)
-        if self._anim and self._anim.state() == self._anim.Running:
+        if self._anim and self._anim.state() == QAbstractAnimation.State.Running:
             self._anim.stop()
         
         # Tween shadow blur
@@ -239,7 +274,7 @@ class TweenButton(QPushButton):
         pos_anim.setEasingCurve(QEasingCurve.OutCubic)
         pos_anim.setStartValue(self.geometry())
         
-        if self._orig_geometry:
+        if self._orig_geometry is not None:
             lifted = self._orig_geometry.translated(0, -4)
             pos_anim.setEndValue(lifted)
         
@@ -249,9 +284,10 @@ class TweenButton(QPushButton):
         self._anim = group
         self._anim.start()
     
-    def leaveEvent(self, event):
+    def leaveEvent(self, a0: QEvent) -> None:
+        event = a0
         super().leaveEvent(event)
-        if self._anim and self._anim.state() == self._anim.Running:
+        if self._anim and self._anim.state() == QAbstractAnimation.State.Running:
             self._anim.stop()
         
         self._anim = QPropertyAnimation(self._shadow, b"blurRadius")
@@ -264,7 +300,7 @@ class TweenButton(QPushButton):
         pos_anim.setDuration(150)
         pos_anim.setEasingCurve(QEasingCurve.OutCubic)
         
-        if self._orig_geometry:
+        if self._orig_geometry is not None:
             pos_anim.setStartValue(self.geometry())
             pos_anim.setEndValue(self._orig_geometry)
         
@@ -274,8 +310,9 @@ class TweenButton(QPushButton):
         self._anim = group
         self._anim.start()
     
-    def mousePressEvent(self, event):
-        if self._anim and self._anim.state() == self._anim.Running:
+    def mousePressEvent(self, e: QMouseEvent) -> None:
+        event = e
+        if self._anim and self._anim.state() == QAbstractAnimation.State.Running:
             self._anim.stop()
         
         self._anim = QPropertyAnimation(self, b"geometry")
@@ -283,15 +320,16 @@ class TweenButton(QPushButton):
         self._anim.setEasingCurve(QEasingCurve.OutCubic)
         self._anim.setStartValue(self.geometry())
         
-        if self._orig_geometry:
+        if self._orig_geometry is not None:
             pressed = self._orig_geometry.translated(1, 2)
             self._anim.setEndValue(pressed)
         
         self._anim.start()
         super().mousePressEvent(event)
     
-    def mouseReleaseEvent(self, event):
-        if self._anim and self._anim.state() == self._anim.Running:
+    def mouseReleaseEvent(self, e: QMouseEvent) -> None:
+        event = e
+        if self._anim and self._anim.state() == QAbstractAnimation.State.Running:
             self._anim.stop()
         
         self._anim = QPropertyAnimation(self, b"geometry")
@@ -299,10 +337,10 @@ class TweenButton(QPushButton):
         self._anim.setEasingCurve(QEasingCurve.OutCubic)
         self._anim.setStartValue(self.geometry())
         
-        if self._orig_geometry and self.underMouse():
+        if self._orig_geometry is not None and self.underMouse():
             lifted = self._orig_geometry.translated(0, -4)
             self._anim.setEndValue(lifted)
-        elif self._orig_geometry:
+        elif self._orig_geometry is not None:
             self._anim.setEndValue(self._orig_geometry)
         
         self._anim.start()
@@ -315,10 +353,11 @@ class TweenListWidget(QListWidget):
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._item_anims = {}  # Track animations per item
+        self._item_anims: Dict[int, QVariantAnimation] = {}  # Track animations per item
         self.setMouseTracking(True)
     
-    def mouseMoveEvent(self, event):
+    def mouseMoveEvent(self, e: QMouseEvent) -> None:
+        event = e
         super().mouseMoveEvent(event)
         item = self.itemAt(event.pos())
         
@@ -331,35 +370,47 @@ class TweenListWidget(QListWidget):
             idx = self.row(item)
             self._tween_item_size(idx, 1.06, 200)
     
-    def leaveEvent(self, event):
+    def leaveEvent(self, a0: QEvent) -> None:
+        event = a0
         super().leaveEvent(event)
         for idx in range(self.count()):
             self._tween_item_size(idx, 1.0, 150)
     
-    def _tween_item_size(self, row, scale, duration):
+    def _tween_item_size(self, row: int, scale: float, duration: int) -> None:
         """Smooth scale tween for list item."""
         if row < 0 or row >= self.count():
             return
-        
+
         item = self.item(row)
         if not item:
             return
-        
-        # Use height as scale proxy
+
         base_height = 30
         target_height = int(base_height * scale)
-        
-        anim = QPropertyAnimation(item, b"sizeHint")
+        current_height = item.sizeHint().height()
+
+        anim = QVariantAnimation(self)
         anim.setDuration(duration)
         anim.setEasingCurve(QEasingCurve.OutCubic)
-        anim.setStartValue(QSize(0, item.sizeHint().height()))
-        anim.setEndValue(QSize(0, target_height))
-        
-        if row in self._item_anims:
-            old_anim = self._item_anims[row]
-            if old_anim.state() == old_anim.Running:
-                old_anim.stop()
-        
+        anim.setStartValue(current_height)
+        anim.setEndValue(target_height)
+
+        def apply_value(value: object, *, _item=item) -> None:
+            if isinstance(value, (int, float)):
+                height = int(value)
+            elif hasattr(value, "__int__"):
+                height = int(value)  # type: ignore[arg-type]
+            else:
+                return
+            current_size = _item.sizeHint()
+            _item.setSizeHint(QSize(current_size.width(), height))
+
+        anim.valueChanged.connect(apply_value)
+
+        old_anim = self._item_anims.get(row)
+        if old_anim and old_anim.state() == QAbstractAnimation.State.Running:
+            old_anim.stop()
+
         self._item_anims[row] = anim
         anim.start()
 
@@ -382,7 +433,8 @@ class TweenListWidget(QListWidget):
 class FloatingConverterWindow(QWidget):
     closed = pyqtSignal()
 
-    def closeEvent(self, event):
+    def closeEvent(self, a0: QCloseEvent) -> None:
+        event = a0
         self.closed.emit()
         event.ignore()
         self.hide()
@@ -410,54 +462,82 @@ class CardWorkspace(QWidget):
         self._layout.addWidget(card, 0, 0)
         self._rebuild()
 
-    def eventFilter(self, obj, event):
+    def eventFilter(self, a0: QObject, a1: QEvent) -> bool:
+        obj = a0
+        event = a1
+        if not isinstance(obj, QWidget):
+            return super().eventFilter(obj, event)
         card = self._handles.get(obj)
         if card is None:
             return super().eventFilter(obj, event)
         handle_widget = cast(QWidget, obj)
-        if event.type() == QEvent.Type.MouseButtonPress and event.button() == Qt.MouseButton.LeftButton:
-            self._drag_start = event.globalPos()
-            handle_widget.setCursor(Qt.CursorShape.ClosedHandCursor)
-        elif (
-            event.type() == QEvent.Type.MouseMove
-            and event.buttons() & Qt.MouseButton.LeftButton
-            and self._drag_start is not None
-        ):
-            if (event.globalPos() - self._drag_start).manhattanLength() >= QApplication.startDragDistance():
-                drag = QDrag(handle_widget)
-                mime = QMimeData()
-                mime.setData("application/x-card-id", QByteArray(str(id(card)).encode("ascii")))
-                drag.setMimeData(mime)
-                pixmap = card.grab()
-                drag.setPixmap(pixmap)
-                hot_spot = handle_widget.mapTo(card, event.pos())
-                drag.setHotSpot(hot_spot)
-                drag.exec_(Qt.DropAction.MoveAction)
+
+        def as_mouse_event(evt: QEvent) -> Optional[QMouseEvent]:
+            return evt if isinstance(evt, QMouseEvent) else None
+
+        if event.type() == QEvent.Type.MouseButtonPress:
+            mouse_event = as_mouse_event(event)
+            if mouse_event and mouse_event.button() == Qt.MouseButton.LeftButton:
+                self._drag_start = mouse_event.globalPos()
+                handle_widget.setCursor(Qt.CursorShape.ClosedHandCursor)
+                return True
+        elif event.type() == QEvent.Type.MouseMove:
+            mouse_event = as_mouse_event(event)
+            if (
+                mouse_event is not None
+                and bool(mouse_event.buttons() & Qt.MouseButton.LeftButton)
+                and self._drag_start is not None
+            ):
+                if (
+                    mouse_event.globalPos() - self._drag_start
+                ).manhattanLength() >= QApplication.startDragDistance():
+                    drag = QDrag(handle_widget)
+                    mime = QMimeData()
+                    mime.setData("application/x-card-id", QByteArray(str(id(card)).encode("ascii")))
+                    drag.setMimeData(mime)
+                    pixmap = card.grab()
+                    drag.setPixmap(pixmap)
+                    hot_spot = handle_widget.mapTo(card, mouse_event.pos())
+                    drag.setHotSpot(hot_spot)
+                    drag.exec_(Qt.DropAction.MoveAction)
+                    handle_widget.setCursor(Qt.CursorShape.OpenHandCursor)
+                    self._drag_start = None
+                    return True
+        elif event.type() == QEvent.Type.MouseButtonRelease:
+            mouse_event = as_mouse_event(event)
+            if mouse_event:
                 handle_widget.setCursor(Qt.CursorShape.OpenHandCursor)
                 self._drag_start = None
                 return True
-        elif event.type() == QEvent.Type.MouseButtonRelease:
-            handle_widget.setCursor(Qt.CursorShape.OpenHandCursor)
-            self._drag_start = None
         return super().eventFilter(obj, event)
 
-    def dragEnterEvent(self, event):
-        if event.mimeData().hasFormat("application/x-card-id"):
+    def _mime_has_card_id(self, mime: Optional[QMimeData]) -> bool:
+        return bool(mime and mime.hasFormat("application/x-card-id"))
+
+    def dragEnterEvent(self, a0: QDragEnterEvent) -> None:
+        event = a0
+        mime = event.mimeData()
+        if self._mime_has_card_id(mime):
             event.acceptProposedAction()
         else:
             event.ignore()
 
-    def dragMoveEvent(self, event):
-        if event.mimeData().hasFormat("application/x-card-id"):
+    def dragMoveEvent(self, a0: QDragMoveEvent) -> None:
+        event = a0
+        mime = event.mimeData()
+        if self._mime_has_card_id(mime):
             event.acceptProposedAction()
         else:
             event.ignore()
 
-    def dropEvent(self, event):
-        if not event.mimeData().hasFormat("application/x-card-id"):
+    def dropEvent(self, a0: QDropEvent) -> None:
+        event = a0
+        mime = event.mimeData()
+        if not self._mime_has_card_id(mime):
             event.ignore()
             return
-        card_id_bytes = bytes(event.mimeData().data("application/x-card-id"))
+        assert mime is not None
+        card_id_bytes = bytes(mime.data("application/x-card-id"))
         try:
             card_id = int(card_id_bytes.decode("ascii"))
         except ValueError:
@@ -467,15 +547,7 @@ class CardWorkspace(QWidget):
         if card is None:
             event.ignore()
             return
-        if hasattr(event, "position"):
-            pos_obj = event.position()
-            if hasattr(pos_obj, "toPoint"):
-                pos = pos_obj.toPoint()
-            else:
-                pos = QPoint(int(pos_obj.x()), int(pos_obj.y()))
-        else:
-            pos_obj = event.pos()
-            pos = pos_obj if isinstance(pos_obj, QPoint) else pos_obj.toPoint()
+        pos = event.pos()
         reordered = [c for c in self._cards if c is not card]
         insert_at = self._index_for_position(pos, reordered)
         reordered.insert(insert_at, card)
@@ -726,7 +798,8 @@ class HelpAwareDialog(QDialog):
         if WINDOW_CONTEXT_HELP_HINT is not None:
             self.setWindowFlag(WINDOW_CONTEXT_HELP_HINT, True)
 
-    def event(self, event):
+    def event(self, a0: QEvent) -> bool:
+        event = a0
         event_type = event.type()
         enter_mode_type = next(
             (
@@ -1476,13 +1549,15 @@ class BudgetTracker(QMainWindow):
             effect.setColor(QColor(0, 0, 0, max(shadow_strength - 40, 30)))
             action_bar.setGraphicsEffect(effect)
 
-    def moveEvent(self, event):
+    def moveEvent(self, a0: QMoveEvent) -> None:
+        event = a0
         super().moveEvent(event)
         window = self.converter_window
         if window is not None and window.isVisible():
             self._position_converter_window()
 
-    def resizeEvent(self, event):
+    def resizeEvent(self, a0: QResizeEvent) -> None:
+        event = a0
         super().resizeEvent(event)
         window = self.converter_window
         if window is not None and window.isVisible():
