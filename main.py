@@ -2142,6 +2142,9 @@ class BudgetTracker(QMainWindow):
                 variance_item = QTableWidgetItem("--")
                 variance_item.setData(Qt.ItemDataRole.UserRole, -1)
             table.setItem(row, 3, variance_item)
+            
+            # Animate row appearance with staggered fade
+            self._animate_table_row(table, row, row * 50)
 
             if used_percent is not None:
                 tooltip = f"Used {used_percent:.0f}% of budget"
@@ -3233,8 +3236,66 @@ class BudgetTracker(QMainWindow):
         else:
             bg = "#E8F5E9" if positive else "#FDE0DC"
         self.balance_label.setText(f"{arrow} Net Position: RM {self.balance:.2f}")
-        self.balance_label.setStyleSheet(f"color: {fg}; background-color: {bg};")
-
+        
+        # Smooth color tween animation on balance change
+        self._animate_label_change(self.balance_label, fg, bg)
+    
+    def _animate_label_change(self, label, target_fg, target_bg):
+        """Smoothly tween label color changes."""
+        effect = QGraphicsOpacityEffect()
+        label.setGraphicsEffect(effect)
+        
+        # Slight blink/highlight effect on balance update
+        anim = QPropertyAnimation(effect, b"opacity")
+        anim.setDuration(400)
+        anim.setEasingCurve(QEasingCurve.InOutQuad)
+        anim.setStartValue(1.0)
+        anim.setEndValue(1.0)
+        
+        # Quick visual pulse
+        seq = QSequentialAnimationGroup()
+        pulse1 = QPropertyAnimation(effect, b"opacity")
+        pulse1.setDuration(150)
+        pulse1.setEasingCurve(QEasingCurve.OutQuad)
+        pulse1.setStartValue(1.0)
+        pulse1.setEndValue(0.6)
+        
+        pulse2 = QPropertyAnimation(effect, b"opacity")
+        pulse2.setDuration(150)
+        pulse2.setEasingCurve(QEasingCurve.OutQuad)
+        pulse2.setStartValue(0.6)
+        pulse2.setEndValue(1.0)
+        
+        seq.addAnimation(pulse1)
+        seq.addAnimation(pulse2)
+        seq.start()
+    
+    def _animate_new_item(self, item: QListWidgetItem):
+        """Smooth slide-in animation for newly added list items."""
+        # Quick fade-in pulse
+        effect = QGraphicsOpacityEffect()
+        item.setData(Qt.ItemDataRole.UserRole + 1, effect)
+        
+        anim = QSequentialAnimationGroup()
+        fade_in = QPropertyAnimation(effect, b"opacity")
+        fade_in.setDuration(300)
+        fade_in.setEasingCurve(QEasingCurve.OutQuad)
+        fade_in.setStartValue(0.0)
+        fade_in.setEndValue(1.0)
+        
+        anim.addAnimation(fade_in)
+        anim.start()
+    
+    def _animate_table_row(self, table, row, delay_ms):
+        """Highlight table row with staggered indigo tint."""
+        def animate_row():
+            for col in range(table.columnCount()):
+                item = table.item(row, col)
+                if item:
+                    item.setBackground(QColor(99, 102, 241, 30))
+                    QTimer.singleShot(200, lambda: item.setBackground(QColor()))
+        QTimer.singleShot(delay_ms, animate_row)
+    
     def undo_last_transaction(self):
         if not self.undo_stack:
             self.toast("Nothing to undo.", 3000)
