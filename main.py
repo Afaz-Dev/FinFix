@@ -22,6 +22,7 @@ from PyQt5.QtGui import (
     QDragEnterEvent,
     QDragMoveEvent,
     QDropEvent,
+    QFocusEvent,
 )
 from PyQt5.QtCore import (
     Qt,
@@ -130,108 +131,108 @@ FALLBACK_NAMES = {
 
 DARK_STYLESHEET = """
 QWidget { background-color: #121212; color: #E0E0E0; font-family: 'Segoe UI'; }
-QLineEdit { background-color: #1E1E1E; border: 2px solid #333333; border-radius: 8px; padding: 6px; color: #E0E0E0; transition: all 0.2s; }
-QLineEdit:focus { border: 2px solid #6366f1; box-shadow: 0 0 12px rgba(99, 102, 241, 0.3); }
+QLineEdit { background-color: #1E1E1E; border: 2px solid #333333; border-radius: 8px; padding: 6px; color: #E0E0E0; }
+QLineEdit:focus { border: 2px solid #6366f1; }
 QListWidget { background-color: #1C1C1C; border: 1px solid #333333; border-radius: 8px; font-family: 'Consolas', 'Cascadia Mono', monospace; }
-QListWidget::item { padding: 6px 8px; border-bottom: 1px solid #2C2C34; transition: all 0.15s; }
+QListWidget::item { padding: 6px 8px; border-bottom: 1px solid #2C2C34; }
 QListWidget::item:hover { background-color: #252530; }
 QListWidget::item:alternate { background-color: #1F1F26; }
 QListWidget::item:last { border-bottom: none; }
 QListWidget::item:selected { background-color: #314261; color: #FFFFFF; }
 QListWidget::item:selected:!active { background-color: #2C3B58; color: #FFFFFF; }
-QPushButton#themeButton { background-color: #323232; border: 1px solid #4A4A4A; border-radius: 8px; padding: 6px 12px; color: #E0E0E0; transition: all 0.2s ease-out; }
+QPushButton#themeButton { background-color: #323232; border: 1px solid #4A4A4A; border-radius: 8px; padding: 6px 12px; color: #E0E0E0; }
 QPushButton#themeButton:hover { background-color: #3C3C3C; border: 1px solid #6366f1; }
-QPushButton#themeButton:pressed { transform: scale(0.98); }
-QPlainTextEdit { background-color: #1E1E1E; border: 1px solid #333333; border-radius: 8px; padding: 6px; color: #E0E0E0; transition: all 0.2s; }
+     
+QPlainTextEdit { background-color: #1E1E1E; border: 1px solid #333333; border-radius: 8px; padding: 6px; color: #E0E0E0; }
 QPlainTextEdit:focus { border: 1px solid #6366f1; }
-QComboBox { background-color: #1E1E1E; border: 2px solid #333333; border-radius: 8px; padding: 6px; color: #E0E0E0; transition: all 0.2s; }
+QComboBox { background-color: #1E1E1E; border: 2px solid #333333; border-radius: 8px; padding: 6px; color: #E0E0E0; }
 QComboBox:focus { border: 2px solid #6366f1; }
 QComboBox:hover { border: 2px solid #4A4A6A; }
 QFrame#HeaderBar { background-color: #1D1D28; border-radius: 18px; }
 QLabel#Title { font-size: 18px; font-weight: 600; background-color: transparent; }
 QLabel#Subtitle { color: #B0BEC5; font-size: 12px; background-color: transparent; }
-QLabel#BalanceValue { background-color: #1E3A29; border-radius: 14px; padding: 8px 14px; font-size: 14px; font-weight: 600; color: #A5D6A7; transition: all 0.3s; }
-QFrame#Card { background-color: #1A1A1F; border: 1px solid #2C2C34; border-radius: 16px; transition: all 0.3s; }
+QLabel#BalanceValue { background-color: #1E3A29; border-radius: 14px; padding: 8px 14px; font-size: 14px; font-weight: 600; color: #A5D6A7; }
+QFrame#Card { background-color: #1A1A1F; border: 1px solid #2C2C34; border-radius: 16px; }
 QFrame#Card:hover { border: 1px solid #404050; }
 QFrame#ActionBar { background-color: #16161C; border: 1px solid #2C2C34; border-radius: 12px; }
 QFrame#SummaryBubble { background-color: #1C1C21; border: 1px solid #2C2C34; border-radius: 14px; }
 QLabel#SummaryText { color: #E0E0E0; font-size: 12px; background-color: transparent; }
 QLabel#SummaryCaption { color: #CFD8DC; font-size: 12px; background-color: transparent; }
 QLabel#SectionTitle { font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: #9FA8DA; background-color: transparent; }
-QFrame#SummaryKPI { background-color: #24242E; border: 1px solid #343447; border-radius: 12px; transition: all 0.2s; }
+QFrame#SummaryKPI { background-color: #24242E; border: 1px solid #343447; border-radius: 12px; }
 QFrame#SummaryKPI:hover { border: 1px solid #4A4A60; }
 QLabel#SummaryKPIHeader { font-size: 12px; font-weight: 600; color: #9FA8DA; }
 QLabel#SummaryKPIValue { font-size: 18px; font-weight: 700; color: #FFFFFF; }
 QLabel#SummaryKPIDelta { font-size: 12px; color: #B0BEC5; }
-QFrame#SummarySubCard { background-color: #1F1F26; border: 1px solid #2E2E38; border-radius: 12px; transition: all 0.2s; }
+QFrame#SummarySubCard { background-color: #1F1F26; border: 1px solid #2E2E38; border-radius: 12px; }
 QFrame#SummarySubCard:hover { border: 1px solid #404050; }
 QTableWidget#SummaryTable { background-color: #1E1E24; border: 1px solid #2C2C34; border-radius: 10px; gridline-color: #2C2C34; }
-QTableWidget#SummaryTable::item { padding: 6px; font-size: 12px; background-color: #1E1E24; color: #E0E0E0; transition: all 0.15s; }
+QTableWidget#SummaryTable::item { padding: 6px; font-size: 12px; background-color: #1E1E24; color: #E0E0E0; }
 QTableWidget#SummaryTable::item:hover { background-color: #262631; }
 QTableWidget#SummaryTable::item:alternate { background-color: #262631; }
 QTableWidget#SummaryTable::item:selected { background-color: #2F3B59; color: #FFFFFF; }
 QTableWidget#SummaryTable QHeaderView::section { background-color: #252532; color: #E0E0E0; font-size: 12px; padding: 6px; border: none; }
 QListWidget#SummaryAlerts { background-color: #1E1E24; border: 1px solid #2C2C34; border-radius: 10px; padding: 6px; font-family: 'Segoe UI'; }
-QListWidget#SummaryAlerts::item { border-bottom: 1px solid #2C2C34; padding: 6px 4px; transition: all 0.15s; }
+QListWidget#SummaryAlerts::item { border-bottom: 1px solid #2C2C34; padding: 6px 4px; }
 QListWidget#SummaryAlerts::item:hover { background-color: #252530; }
 QListWidget#SummaryAlerts::item:last { border-bottom: none; }
-QPushButton#SecondaryButton { background-color: #2A2A33; border: 1px solid #3A3A45; border-radius: 10px; padding: 9px 12px; font-weight: 600; color: #F5F5F5; transition: all 0.2s ease-out; }
-QPushButton#SecondaryButton:hover { background-color: #353543; border: 1px solid #4A5A6A; transform: translateY(-2px); }
-QPushButton#SecondaryButton:pressed { transform: translateY(0px); }
+QPushButton#SecondaryButton { background-color: #2A2A33; border: 1px solid #3A3A45; border-radius: 10px; padding: 9px 12px; font-weight: 600; color: #F5F5F5; }
+QPushButton#SecondaryButton:hover { background-color: #353543; border: 1px solid #4A5A6A; }
+     
 QLabel#InfoText { color: #B0BEC5; font-size: 11px; background-color: transparent; }
 """.strip()
 
 LIGHT_STYLESHEET = """
 QWidget { background-color: #F5F5F5; color: #212121; font-family: 'Segoe UI'; }
-QLineEdit { background-color: #FFFFFF; border: 2px solid #D0D0D0; border-radius: 8px; padding: 6px; color: #212121; transition: all 0.2s; }
-QLineEdit:focus { border: 2px solid #6366f1; box-shadow: 0 0 12px rgba(99, 102, 241, 0.2); }
+QLineEdit { background-color: #FFFFFF; border: 2px solid #D0D0D0; border-radius: 8px; padding: 6px; color: #212121; }
+QLineEdit:focus { border: 2px solid #6366f1; }
 QListWidget { background-color: #FFFFFF; border: 1px solid #D0D0D0; border-radius: 8px; font-family: 'Consolas', 'Cascadia Mono', monospace; }
-QListWidget::item { padding: 6px 8px; border-bottom: 1px solid #E0E0E0; transition: all 0.15s; }
+QListWidget::item { padding: 6px 8px; border-bottom: 1px solid #E0E0E0; }
 QListWidget::item:hover { background-color: #F0F3FF; }
 QListWidget::item:alternate { background-color: #F4F7FF; }
 QListWidget::item:selected { background-color: #CCE0FF; color: #102A43; }
 QListWidget::item:selected:!active { background-color: #D7E6FF; color: #102A43; }
 QListWidget::item:last { border-bottom: none; }
-QPushButton#themeButton { background-color: #E0E0E0; border: 1px solid #BDBDBD; border-radius: 8px; padding: 6px 12px; color: #212121; transition: all 0.2s ease-out; }
+QPushButton#themeButton { background-color: #E0E0E0; border: 1px solid #BDBDBD; border-radius: 8px; padding: 6px 12px; color: #212121; }
 QPushButton#themeButton:hover { background-color: #D5D5D5; border: 1px solid #6366f1; }
-QPushButton#themeButton:pressed { transform: scale(0.98); }
-QPlainTextEdit { background-color: #FFFFFF; border: 1px solid #D0D0D0; border-radius: 8px; padding: 6px; color: #212121; transition: all 0.2s; }
+     
+QPlainTextEdit { background-color: #FFFFFF; border: 1px solid #D0D0D0; border-radius: 8px; padding: 6px; color: #212121; }
 QPlainTextEdit:focus { border: 1px solid #6366f1; }
-QComboBox { background-color: #FFFFFF; border: 2px solid #D0D0D0; border-radius: 8px; padding: 6px; color: #212121; transition: all 0.2s; }
+QComboBox { background-color: #FFFFFF; border: 2px solid #D0D0D0; border-radius: 8px; padding: 6px; color: #212121; }
 QComboBox:focus { border: 2px solid #6366f1; }
 QComboBox:hover { border: 2px solid #B0B0D0; }
-QFrame#HeaderBar { background-color: #FFFFFF; border-radius: 18px; border: 1px solid #E0E0E0; transition: all 0.2s; }
+QFrame#HeaderBar { background-color: #FFFFFF; border-radius: 18px; border: 1px solid #E0E0E0; }
 QFrame#HeaderBar:hover { border: 1px solid #D0D0D0; }
 QLabel#Title { font-size: 18px; font-weight: 600; color: #1B5E20; background-color: transparent; }
 QLabel#Subtitle { color: #5F6368; font-size: 12px; background-color: transparent; }
-QLabel#BalanceValue { background-color: #E8F5E9; border-radius: 14px; padding: 8px 14px; font-size: 14px; font-weight: 600; color: #2E7D32; transition: all 0.3s; }
-QFrame#Card { background-color: #FFFFFF; border: 1px solid #E0E0E0; border-radius: 16px; transition: all 0.3s; }
+QLabel#BalanceValue { background-color: #E8F5E9; border-radius: 14px; padding: 8px 14px; font-size: 14px; font-weight: 600; color: #2E7D32; }
+QFrame#Card { background-color: #FFFFFF; border: 1px solid #E0E0E0; border-radius: 16px; }
 QFrame#Card:hover { border: 1px solid #D0D0D0; }
 QFrame#ActionBar { background-color: rgba(255, 255, 255, 0.85); border: 1px solid #DADADA; border-radius: 12px; }
 QFrame#SummaryBubble { background-color: #F9F9F9; border: 1px solid #D6D6D6; border-radius: 14px; }
 QLabel#SummaryText { color: #212121; font-size: 12px; background-color: transparent; }
 QLabel#SummaryCaption { color: #455A64; font-size: 12px; background-color: transparent; }
 QLabel#SectionTitle { font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: #3949AB; background-color: transparent; }
-QFrame#SummaryKPI { background-color: #FFFFFF; border: 1px solid #DADFE6; border-radius: 12px; transition: all 0.2s; }
+QFrame#SummaryKPI { background-color: #FFFFFF; border: 1px solid #DADFE6; border-radius: 12px; }
 QFrame#SummaryKPI:hover { border: 1px solid #C0CADB; }
 QLabel#SummaryKPIHeader { font-size: 12px; font-weight: 600; color: #5F6368; }
 QLabel#SummaryKPIValue { font-size: 18px; font-weight: 700; color: #1B5E20; }
 QLabel#SummaryKPIDelta { font-size: 12px; color: #546E7A; }
-QFrame#SummarySubCard { background-color: #FFFFFF; border: 1px solid #DADFE6; border-radius: 12px; transition: all 0.2s; }
+QFrame#SummarySubCard { background-color: #FFFFFF; border: 1px solid #DADFE6; border-radius: 12px; }
 QFrame#SummarySubCard:hover { border: 1px solid #C0CADB; }
 QTableWidget#SummaryTable { background-color: #FFFFFF; border: 1px solid #D6D6D6; border-radius: 10px; gridline-color: #E0E0E0; }
-QTableWidget#SummaryTable::item { padding: 6px; font-size: 12px; background-color: #FFFFFF; color: #212121; transition: all 0.15s; }
+QTableWidget#SummaryTable::item { padding: 6px; font-size: 12px; background-color: #FFFFFF; color: #212121; }
 QTableWidget#SummaryTable::item:hover { background-color: #F8FAFE; }
 QTableWidget#SummaryTable::item:alternate { background-color: #F4F6FB; }
 QTableWidget#SummaryTable::item:selected { background-color: #D9E4FF; color: #1A237E; }
 QTableWidget#SummaryTable QHeaderView::section { background-color: #ECEFF1; color: #37474F; font-size: 12px; padding: 6px; border: none; }
 QListWidget#SummaryAlerts { background-color: #FFFFFF; border: 1px solid #D6D6D6; border-radius: 10px; padding: 6px; font-family: 'Segoe UI'; }
-QListWidget#SummaryAlerts::item { border-bottom: 1px solid #E0E0E0; padding: 6px 4px; transition: all 0.15s; }
+QListWidget#SummaryAlerts::item { border-bottom: 1px solid #E0E0E0; padding: 6px 4px; }
 QListWidget#SummaryAlerts::item:hover { background-color: #F8FAFE; }
 QListWidget#SummaryAlerts::item:last { border-bottom: none; }
-QPushButton#SecondaryButton { background-color: #F0F0F0; border: 1px solid #D0D0D0; border-radius: 10px; padding: 9px 12px; font-weight: 600; color: #1F1F1F; transition: all 0.2s ease-out; }
-QPushButton#SecondaryButton:hover { background-color: #E4E4E4; border: 1px solid #6366f1; transform: translateY(-2px); }
-QPushButton#SecondaryButton:pressed { transform: translateY(0px); }
+QPushButton#SecondaryButton { background-color: #F0F0F0; border: 1px solid #D0D0D0; border-radius: 10px; padding: 9px 12px; font-weight: 600; color: #1F1F1F; }
+QPushButton#SecondaryButton:hover { background-color: #E4E4E4; border: 1px solid #6366f1; }
+     
 QLabel#InfoText { color: #5F6368; font-size: 11px; background-color: transparent; }
 """.strip()
 
@@ -428,6 +429,45 @@ class TweenListWidget(QListWidget):
         anim.setEasingCurve(QEasingCurve.InOutQuad)
         anim.start()
         return anim
+
+
+class GlowLineEdit(QLineEdit):
+    """QLineEdit with a QGraphicsDropShadowEffect focus glow."""
+
+    def __init__(self, text: str = "", parent: Optional[QWidget] = None):
+        super().__init__(text, parent)
+        self._glow_color = QColor("#6366F1")
+        self._shadow = QGraphicsDropShadowEffect(self)
+        self._shadow.setOffset(0, 0)
+        self._shadow.setBlurRadius(0)
+        shadow_color = QColor(self._glow_color)
+        shadow_color.setAlpha(0)
+        self._shadow.setColor(shadow_color)
+        self.setGraphicsEffect(self._shadow)
+
+        self._glow_anim = QPropertyAnimation(self._shadow, b"blurRadius", self)
+        self._glow_anim.setDuration(160)
+        self._glow_anim.setEasingCurve(QEasingCurve.OutCubic)
+
+    def focusInEvent(self, e: QFocusEvent) -> None:
+        super().focusInEvent(e)
+        self._animate_glow(14.0, 150)
+
+    def focusOutEvent(self, e: QFocusEvent) -> None:
+        super().focusOutEvent(e)
+        self._animate_glow(0.0, 0)
+
+    def _animate_glow(self, end_radius: float, alpha: int) -> None:
+        if self._glow_anim.state() == QAbstractAnimation.State.Running:
+            self._glow_anim.stop()
+
+        self._glow_anim.setStartValue(self._shadow.blurRadius())
+        self._glow_anim.setEndValue(end_radius)
+        self._glow_anim.start()
+
+        color = QColor(self._glow_color)
+        color.setAlpha(alpha)
+        self._shadow.setColor(color)
 
 
 class FloatingConverterWindow(QWidget):
@@ -1015,13 +1055,13 @@ class BudgetTracker(QMainWindow):
         tx_header.setObjectName("SectionTitle")
         form_layout.addWidget(tx_header)
 
-        self.amount_input = QLineEdit()
+        self.amount_input = GlowLineEdit()
         self.amount_input.setPlaceholderText("Enter amount (e.g., 50.00)")
         self.amount_input.setValidator(QDoubleValidator(0.01, 1_000_000.0, 2))
         self.amount_input.returnPressed.connect(self.submit_default_transaction)
         form_layout.addWidget(self.amount_input)
 
-        self.desc_input = QLineEdit()
+        self.desc_input = GlowLineEdit()
         self.desc_input.setPlaceholderText("Description (e.g., Lunch, Books)")
         self.desc_input.returnPressed.connect(self.submit_default_transaction)
         form_layout.addWidget(self.desc_input)
@@ -1031,10 +1071,10 @@ class BudgetTracker(QMainWindow):
         self.category_input.setInsertPolicy(QComboBox.InsertAlphabetically)
         self.category_input.setSizeAdjustPolicy(QComboBox.AdjustToContents)
         self.category_input.setMinimumContentsLength(12)
-        line_edit = self.category_input.lineEdit()
-        if line_edit is not None:
-            line_edit.setPlaceholderText("Category (e.g., Food, Books, Savings)")
-            line_edit.returnPressed.connect(self.submit_default_transaction)
+        category_line_edit = GlowLineEdit(parent=self.category_input)
+        self.category_input.setLineEdit(category_line_edit)
+        category_line_edit.setPlaceholderText("Category (e.g., Food, Books, Savings)")
+        category_line_edit.returnPressed.connect(self.submit_default_transaction)
         form_layout.addWidget(self.category_input)
 
         btn_layout = QHBoxLayout()
@@ -1056,9 +1096,9 @@ class BudgetTracker(QMainWindow):
         budget_header.setObjectName("SectionTitle")
         budget_layout.addWidget(budget_header)
 
-        self.budget_category_input = QLineEdit()
+        self.budget_category_input = GlowLineEdit()
         self.budget_category_input.setPlaceholderText("Category name (e.g., Food)")
-        self.budget_amount_input = QLineEdit()
+        self.budget_amount_input = GlowLineEdit()
         self.budget_amount_input.setPlaceholderText("Monthly budget (RM)")
         self.budget_amount_input.setValidator(QDoubleValidator(0.00, 1_000_000.0, 2))
         budget_form = QHBoxLayout()
@@ -1458,16 +1498,16 @@ class BudgetTracker(QMainWindow):
         header.setObjectName("SectionTitle")
         layout.addWidget(header)
 
-        self.currency_amount_input = QLineEdit()
+        self.currency_amount_input = GlowLineEdit()
         self.currency_amount_input.setPlaceholderText("Amount in MYR")
         self.currency_amount_input.setValidator(QDoubleValidator(0.00, 1_000_000.0, 2))
         layout.addWidget(self.currency_amount_input)
 
         self.currency_target_combo = QComboBox()
         self.currency_target_combo.setEditable(True)
-        combo_edit = self.currency_target_combo.lineEdit()
-        if combo_edit is not None:
-            combo_edit.setPlaceholderText("Search currency (e.g., USD - US Dollar)")
+        combo_edit = GlowLineEdit(parent=self.currency_target_combo)
+        self.currency_target_combo.setLineEdit(combo_edit)
+        combo_edit.setPlaceholderText("Search currency (e.g., USD - US Dollar)")
         layout.addWidget(self.currency_target_combo)
 
         button_row = QHBoxLayout()
@@ -1622,8 +1662,7 @@ class BudgetTracker(QMainWindow):
                 padding: 10px 16px;
                 font-weight: bold; 
                 font-size: 12pt;
-                transition: all 0.2s ease-out;
-            }}
+                }}
             QPushButton:hover {{ 
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {self._lighten_color(color1)}, stop:1 {self._lighten_color(color2)});
                 padding: 9px 16px;
@@ -2520,10 +2559,10 @@ class BudgetTracker(QMainWindow):
         if current_index >= 0:
             type_combo.setCurrentIndex(current_index)
 
-        amount_edit = QLineEdit(f"{tx['amount']:.2f}")
+        amount_edit = GlowLineEdit(f"{tx['amount']:.2f}")
         amount_edit.setValidator(QDoubleValidator(0.01, 1_000_000.0, 2))
-        category_edit = QLineEdit(tx["category"])
-        desc_edit = QLineEdit(tx["desc"])
+        category_edit = GlowLineEdit(tx["category"])
+        desc_edit = GlowLineEdit(tx["desc"])
 
         form.addRow("Type", type_combo)
         form.addRow("Amount (RM)", amount_edit)
@@ -2653,7 +2692,7 @@ class BudgetTracker(QMainWindow):
         layout = QVBoxLayout(dialog)
         form = QFormLayout()
 
-        amount_edit = QLineEdit()
+        amount_edit = GlowLineEdit()
         amount_edit.setPlaceholderText("Amount to use (RM)")
         amount_edit.setValidator(QDoubleValidator(0.01, 1_000_000.0, 2))
         form.addRow("Amount (RM)", amount_edit)
@@ -2677,7 +2716,7 @@ class BudgetTracker(QMainWindow):
         expense_combo.setCurrentText("General")
         form.addRow("Expense category", expense_combo)
 
-        desc_edit = QLineEdit()
+        desc_edit = GlowLineEdit()
         desc_edit.setPlaceholderText("Description (optional)")
         form.addRow("Description", desc_edit)
 
@@ -3392,4 +3431,5 @@ if __name__ == "__main__":
     win = BudgetTracker()
     win.show()
     sys.exit(app.exec_())
+
 
