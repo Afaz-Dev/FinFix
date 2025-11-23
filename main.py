@@ -22,7 +22,6 @@ from PyQt5.QtGui import (
     QDragEnterEvent,
     QDragMoveEvent,
     QDropEvent,
-    QFocusEvent,
 )
 from PyQt5.QtCore import (
     Qt,
@@ -63,6 +62,8 @@ try:
     Figure = getattr(matplotlib_figure, "Figure", None)
     FigureCanvasQTAgg = getattr(matplotlib_backend, "FigureCanvasQTAgg", None)
     MATPLOTLIB_AVAILABLE = Figure is not None and FigureCanvasQTAgg is not None
+except KeyboardInterrupt:
+    MATPLOTLIB_AVAILABLE = False
 except Exception:
     MATPLOTLIB_AVAILABLE = False
 
@@ -429,45 +430,6 @@ class TweenListWidget(QListWidget):
         anim.setEasingCurve(QEasingCurve.InOutQuad)
         anim.start()
         return anim
-
-
-class GlowLineEdit(QLineEdit):
-    """QLineEdit with a QGraphicsDropShadowEffect focus glow."""
-
-    def __init__(self, text: str = "", parent: Optional[QWidget] = None):
-        super().__init__(text, parent)
-        self._glow_color = QColor("#6366F1")
-        self._shadow = QGraphicsDropShadowEffect(self)
-        self._shadow.setOffset(0, 0)
-        self._shadow.setBlurRadius(0)
-        shadow_color = QColor(self._glow_color)
-        shadow_color.setAlpha(0)
-        self._shadow.setColor(shadow_color)
-        self.setGraphicsEffect(self._shadow)
-
-        self._glow_anim = QPropertyAnimation(self._shadow, b"blurRadius", self)
-        self._glow_anim.setDuration(160)
-        self._glow_anim.setEasingCurve(QEasingCurve.OutCubic)
-
-    def focusInEvent(self, e: QFocusEvent) -> None:
-        super().focusInEvent(e)
-        self._animate_glow(14.0, 150)
-
-    def focusOutEvent(self, e: QFocusEvent) -> None:
-        super().focusOutEvent(e)
-        self._animate_glow(0.0, 0)
-
-    def _animate_glow(self, end_radius: float, alpha: int) -> None:
-        if self._glow_anim.state() == QAbstractAnimation.State.Running:
-            self._glow_anim.stop()
-
-        self._glow_anim.setStartValue(self._shadow.blurRadius())
-        self._glow_anim.setEndValue(end_radius)
-        self._glow_anim.start()
-
-        color = QColor(self._glow_color)
-        color.setAlpha(alpha)
-        self._shadow.setColor(color)
 
 
 class FloatingConverterWindow(QWidget):
@@ -1055,13 +1017,13 @@ class BudgetTracker(QMainWindow):
         tx_header.setObjectName("SectionTitle")
         form_layout.addWidget(tx_header)
 
-        self.amount_input = GlowLineEdit()
+        self.amount_input = QLineEdit()
         self.amount_input.setPlaceholderText("Enter amount (e.g., 50.00)")
         self.amount_input.setValidator(QDoubleValidator(0.01, 1_000_000.0, 2))
         self.amount_input.returnPressed.connect(self.submit_default_transaction)
         form_layout.addWidget(self.amount_input)
 
-        self.desc_input = GlowLineEdit()
+        self.desc_input = QLineEdit()
         self.desc_input.setPlaceholderText("Description (e.g., Lunch, Books)")
         self.desc_input.returnPressed.connect(self.submit_default_transaction)
         form_layout.addWidget(self.desc_input)
@@ -1071,10 +1033,10 @@ class BudgetTracker(QMainWindow):
         self.category_input.setInsertPolicy(QComboBox.InsertAlphabetically)
         self.category_input.setSizeAdjustPolicy(QComboBox.AdjustToContents)
         self.category_input.setMinimumContentsLength(12)
-        category_line_edit = GlowLineEdit(parent=self.category_input)
-        self.category_input.setLineEdit(category_line_edit)
-        category_line_edit.setPlaceholderText("Category (e.g., Food, Books, Savings)")
-        category_line_edit.returnPressed.connect(self.submit_default_transaction)
+        line_edit = self.category_input.lineEdit()
+        if line_edit is not None:
+            line_edit.setPlaceholderText("Category (e.g., Food, Books, Savings)")
+            line_edit.returnPressed.connect(self.submit_default_transaction)
         form_layout.addWidget(self.category_input)
 
         btn_layout = QHBoxLayout()
@@ -1096,9 +1058,9 @@ class BudgetTracker(QMainWindow):
         budget_header.setObjectName("SectionTitle")
         budget_layout.addWidget(budget_header)
 
-        self.budget_category_input = GlowLineEdit()
+        self.budget_category_input = QLineEdit()
         self.budget_category_input.setPlaceholderText("Category name (e.g., Food)")
-        self.budget_amount_input = GlowLineEdit()
+        self.budget_amount_input = QLineEdit()
         self.budget_amount_input.setPlaceholderText("Monthly budget (RM)")
         self.budget_amount_input.setValidator(QDoubleValidator(0.00, 1_000_000.0, 2))
         budget_form = QHBoxLayout()
@@ -1498,16 +1460,16 @@ class BudgetTracker(QMainWindow):
         header.setObjectName("SectionTitle")
         layout.addWidget(header)
 
-        self.currency_amount_input = GlowLineEdit()
+        self.currency_amount_input = QLineEdit()
         self.currency_amount_input.setPlaceholderText("Amount in MYR")
         self.currency_amount_input.setValidator(QDoubleValidator(0.00, 1_000_000.0, 2))
         layout.addWidget(self.currency_amount_input)
 
         self.currency_target_combo = QComboBox()
         self.currency_target_combo.setEditable(True)
-        combo_edit = GlowLineEdit(parent=self.currency_target_combo)
-        self.currency_target_combo.setLineEdit(combo_edit)
-        combo_edit.setPlaceholderText("Search currency (e.g., USD - US Dollar)")
+        combo_edit = self.currency_target_combo.lineEdit()
+        if combo_edit is not None:
+            combo_edit.setPlaceholderText("Search currency (e.g., USD - US Dollar)")
         layout.addWidget(self.currency_target_combo)
 
         button_row = QHBoxLayout()
@@ -2559,10 +2521,10 @@ class BudgetTracker(QMainWindow):
         if current_index >= 0:
             type_combo.setCurrentIndex(current_index)
 
-        amount_edit = GlowLineEdit(f"{tx['amount']:.2f}")
+        amount_edit = QLineEdit(f"{tx['amount']:.2f}")
         amount_edit.setValidator(QDoubleValidator(0.01, 1_000_000.0, 2))
-        category_edit = GlowLineEdit(tx["category"])
-        desc_edit = GlowLineEdit(tx["desc"])
+        category_edit = QLineEdit(tx["category"])
+        desc_edit = QLineEdit(tx["desc"])
 
         form.addRow("Type", type_combo)
         form.addRow("Amount (RM)", amount_edit)
@@ -2692,7 +2654,7 @@ class BudgetTracker(QMainWindow):
         layout = QVBoxLayout(dialog)
         form = QFormLayout()
 
-        amount_edit = GlowLineEdit()
+        amount_edit = QLineEdit()
         amount_edit.setPlaceholderText("Amount to use (RM)")
         amount_edit.setValidator(QDoubleValidator(0.01, 1_000_000.0, 2))
         form.addRow("Amount (RM)", amount_edit)
@@ -2716,7 +2678,7 @@ class BudgetTracker(QMainWindow):
         expense_combo.setCurrentText("General")
         form.addRow("Expense category", expense_combo)
 
-        desc_edit = GlowLineEdit()
+        desc_edit = QLineEdit()
         desc_edit.setPlaceholderText("Description (optional)")
         form.addRow("Description", desc_edit)
 
