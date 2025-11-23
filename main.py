@@ -48,6 +48,7 @@ from collections import defaultdict
 from datetime import date, timedelta
 import csv, os, shutil, sys, stat, importlib, json, time, ctypes, calendar
 from pathlib import Path
+import signal
 
 import requests
 import sys
@@ -3383,8 +3384,18 @@ class BudgetTracker(QMainWindow):
 
 
 
+def install_ctrl_c_quit(app: QApplication) -> None:
+    """Allow Ctrl+C in the console to close the app without a traceback."""
+    try:
+        signal.signal(signal.SIGINT, lambda *args: app.quit())
+    except Exception:
+        # If the platform does not support SIGINT (very rare), ignore gracefully.
+        pass
+
+
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    install_ctrl_c_quit(app)
     # Set application-wide icon (affects taskbar/dock on many systems)
     try:
         app.setWindowIcon(get_app_icon())
@@ -3392,6 +3403,9 @@ if __name__ == "__main__":
         pass
     win = BudgetTracker()
     win.show()
-    sys.exit(app.exec_())
+    try:
+        sys.exit(app.exec_())
+    except KeyboardInterrupt:
+        sys.exit(0)
 
 
