@@ -71,6 +71,9 @@ def _is_deleted(obj) -> bool:
 Figure = None
 FigureCanvasQTAgg = None
 MATPLOTLIB_AVAILABLE = False
+ENABLE_FOCUS_GLOW = False  # disable if causing painter warnings
+ENABLE_ENTRANCE_ANIMATION = False
+ENABLE_CARD_DRAG = False
 
 try:
     matplotlib_figure = importlib.import_module("matplotlib.figure")
@@ -292,21 +295,6 @@ class TweenButton(QPushButton):
         self._anim.setEasingCurve(QEasingCurve.OutCubic)
         self._anim.setStartValue(12)
         self._anim.setEndValue(24)
-        
-        # Tween position (lift up)
-        pos_anim = QPropertyAnimation(self, b"geometry")
-        pos_anim.setDuration(200)
-        pos_anim.setEasingCurve(QEasingCurve.OutCubic)
-        pos_anim.setStartValue(self.geometry())
-        
-        if self._orig_geometry is not None:
-            lifted = self._orig_geometry.translated(0, -4)
-            pos_anim.setEndValue(lifted)
-        
-        group = QParallelAnimationGroup()
-        group.addAnimation(self._anim)
-        group.addAnimation(pos_anim)
-        self._anim = group
         self._anim.start()
     
     def leaveEvent(self, a0: QEvent) -> None:
@@ -321,57 +309,14 @@ class TweenButton(QPushButton):
         self._anim.setEasingCurve(QEasingCurve.OutCubic)
         self._anim.setStartValue(24)
         self._anim.setEndValue(12)
-        
-        pos_anim = QPropertyAnimation(self, b"geometry")
-        pos_anim.setDuration(150)
-        pos_anim.setEasingCurve(QEasingCurve.OutCubic)
-        
-        if self._orig_geometry is not None:
-            pos_anim.setStartValue(self.geometry())
-            pos_anim.setEndValue(self._orig_geometry)
-        
-        group = QParallelAnimationGroup()
-        group.addAnimation(self._anim)
-        group.addAnimation(pos_anim)
-        self._anim = group
         self._anim.start()
     
     def mousePressEvent(self, e: QMouseEvent) -> None:
         event = e
-        self._ensure_shadow()
-        if self._anim and self._anim.state() == QAbstractAnimation.State.Running:
-            self._anim.stop()
-        
-        self._anim = QPropertyAnimation(self, b"geometry")
-        self._anim.setDuration(100)
-        self._anim.setEasingCurve(QEasingCurve.OutCubic)
-        self._anim.setStartValue(self.geometry())
-        
-        if self._orig_geometry is not None:
-            pressed = self._orig_geometry.translated(1, 2)
-            self._anim.setEndValue(pressed)
-        
-        self._anim.start()
         super().mousePressEvent(event)
     
     def mouseReleaseEvent(self, e: QMouseEvent) -> None:
         event = e
-        self._ensure_shadow()
-        if self._anim and self._anim.state() == QAbstractAnimation.State.Running:
-            self._anim.stop()
-        
-        self._anim = QPropertyAnimation(self, b"geometry")
-        self._anim.setDuration(100)
-        self._anim.setEasingCurve(QEasingCurve.OutCubic)
-        self._anim.setStartValue(self.geometry())
-        
-        if self._orig_geometry is not None and self.underMouse():
-            lifted = self._orig_geometry.translated(0, -4)
-            self._anim.setEndValue(lifted)
-        elif self._orig_geometry is not None:
-            self._anim.setEndValue(self._orig_geometry)
-        
-        self._anim.start()
         super().mouseReleaseEvent(event)
 
 
@@ -494,11 +439,14 @@ class FocusGlowFilter(QObject):
             effect = widget.graphicsEffect()
             if isinstance(effect, QGraphicsDropShadowEffect):
                 effect.setEnabled(False)
-            widget.setGraphicsEffect(None)
+            if not _is_deleted(widget):
+                widget.setGraphicsEffect(None)
         except Exception:
             pass
 
     def _animate_blur(self, widget: QWidget, start: float, end: float, disable_at_end: bool = False) -> None:
+        if _is_deleted(widget) or not widget.isVisible():
+            return
         effect = widget.graphicsEffect()
         if not isinstance(effect, QGraphicsDropShadowEffect):
             effect = QGraphicsDropShadowEffect(widget)
@@ -538,7 +486,7 @@ class FocusGlowFilter(QObject):
         anim.start()
 
     def eventFilter(self, obj: QObject, event: QEvent) -> bool:
-        if isinstance(obj, QWidget):
+        if isinstance(obj, QWidget) and not _is_deleted(obj):
             if event.type() == QEvent.Type.FocusIn:
                 current = 6.0
                 effect = obj.graphicsEffect()
@@ -574,17 +522,23 @@ class CardWorkspace(QWidget):
         self._cards: list[QWidget] = []
         self._handles: dict[QWidget, QWidget] = {}
         self._drag_start: QPoint | None = None
-        self.setAcceptDrops(True)
+        if ENABLE_CARD_DRAG:
+            self.setAcceptDrops(True)
+        else:
+            self.setAcceptDrops(False)
 
     def add_card(self, card: QWidget, handle: QWidget) -> None:
         self._cards.append(card)
-        self._handles[handle] = card
-        handle.installEventFilter(self)
-        handle.setCursor(Qt.CursorShape.OpenHandCursor)
+        if ENABLE_CARD_DRAG:
+            self._handles[handle] = card
+            handle.installEventFilter(self)
+            handle.setCursor(Qt.CursorShape.OpenHandCursor)
         self._layout.addWidget(card, 0, 0)
         self._rebuild()
 
     def eventFilter(self, a0: QObject, a1: QEvent) -> bool:
+        if not ENABLE_CARD_DRAG:
+            return super().eventFilter(a0, a1)
         obj = a0
         event = a1
         if not isinstance(obj, QWidget):
@@ -1044,7 +998,7 @@ class BudgetTracker(QMainWindow):
         self.converter_window: FloatingConverterWindow | None = None
         self.chart_windows: dict[str, ChartWindow] = {}
         self._entrance_anims: list[QParallelAnimationGroup] = []
-        self._focus_glow = FocusGlowFilter(parent=self)
+        self._focus_glow = FocusGlowFilter(parent=self) if ENABLE_FOCUS_GLOW else None
         ensure_storage()
         rate_snapshot = load_cached_rates()
         self.exchange_rates = rate_snapshot.get("rates", {"MYR": 1.0})
@@ -1143,13 +1097,13 @@ class BudgetTracker(QMainWindow):
         self.amount_input.setPlaceholderText("Enter amount (e.g., 50.00)")
         self.amount_input.setValidator(QDoubleValidator(0.01, 1_000_000.0, 2))
         self.amount_input.returnPressed.connect(self.submit_default_transaction)
-        self._focus_glow.watch(self.amount_input)
+        self._watch_focus(self.amount_input)
         form_layout.addWidget(self.amount_input)
 
         self.desc_input = QLineEdit()
         self.desc_input.setPlaceholderText("Description (e.g., Lunch, Books)")
         self.desc_input.returnPressed.connect(self.submit_default_transaction)
-        self._focus_glow.watch(self.desc_input)
+        self._watch_focus(self.desc_input)
         form_layout.addWidget(self.desc_input)
 
         self.category_input = QComboBox()
@@ -1161,15 +1115,42 @@ class BudgetTracker(QMainWindow):
         if line_edit is not None:
             line_edit.setPlaceholderText("Category (e.g., Food, Books, Savings)")
             line_edit.returnPressed.connect(self.submit_default_transaction)
-            self._focus_glow.watch(line_edit)
-        self._focus_glow.watch(self.category_input)
+            self._watch_focus(line_edit)
+        self._watch_focus(self.category_input)
         form_layout.addWidget(self.category_input)
 
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(10)
-        self.income_btn = self.createGradientButton("Add Income", "#4CAF50", "#2E7D32")
-        self.expense_btn = self.createGradientButton("Add Expense", "#E91E63", "#880E4F")
-        self.savings_btn = self.createGradientButton("Log Savings", "#03A9F4", "#01579B")
+        self.income_btn = QPushButton("Add Income")
+        self.expense_btn = QPushButton("Add Expense")
+        self.savings_btn = QPushButton("Log Savings")
+        for btn, c1, c2 in (
+            (self.income_btn, "#4CAF50", "#2E7D32"),
+            (self.expense_btn, "#E91E63", "#880E4F"),
+            (self.savings_btn, "#03A9F4", "#01579B"),
+        ):
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setStyleSheet(
+                f"""
+                QPushButton {{
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {c1}, stop:1 {c2});
+                    border: none;
+                    color: white;
+                    border-radius: 10px;
+                    padding: 10px 16px;
+                    font-weight: bold;
+                    font-size: 12pt;
+                }}
+                QPushButton:hover {{
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {c1}, stop:1 {c2});
+                    opacity: 0.95;
+                }}
+                QPushButton:pressed {{
+                    padding: 9px 16px;
+                }}
+                """
+            )
+            self.enhance_button_with_shadow(btn, blur_radius=18)
         btn_layout.addWidget(self.income_btn)
         btn_layout.addWidget(self.expense_btn)
         btn_layout.addWidget(self.savings_btn)
@@ -1186,11 +1167,11 @@ class BudgetTracker(QMainWindow):
 
         self.budget_category_input = QLineEdit()
         self.budget_category_input.setPlaceholderText("Category name (e.g., Food)")
-        self._focus_glow.watch(self.budget_category_input)
+        self._watch_focus(self.budget_category_input)
         self.budget_amount_input = QLineEdit()
         self.budget_amount_input.setPlaceholderText("Monthly budget (RM)")
         self.budget_amount_input.setValidator(QDoubleValidator(0.00, 1_000_000.0, 2))
-        self._focus_glow.watch(self.budget_amount_input)
+        self._watch_focus(self.budget_amount_input)
         budget_form = QHBoxLayout()
         budget_form.setSpacing(10)
         budget_form.addWidget(self.budget_category_input)
@@ -1290,6 +1271,21 @@ class BudgetTracker(QMainWindow):
         summary_inner = QVBoxLayout(self.summary_frame)
         summary_inner.setContentsMargins(18, 16, 18, 16)
         summary_inner.setSpacing(12)
+
+        actions_row = QHBoxLayout()
+        actions_row.setSpacing(10)
+        actions_row.setContentsMargins(0, 0, 0, 0)
+        self.export_btn = QPushButton("Export Monthly CSV")
+        self.chart_btn = QPushButton("Show Savings Chart")
+        self.expense_chart_btn = QPushButton("Show Expense Pie")
+        self.export_btn.setObjectName("SecondaryButton")
+        self.chart_btn.setObjectName("SecondaryButton")
+        self.expense_chart_btn.setObjectName("SecondaryButton")
+        for btn in (self.export_btn, self.chart_btn, self.expense_chart_btn):
+            self.enhance_button_with_shadow(btn, blur_radius=10)
+            actions_row.addWidget(btn)
+        actions_row.addStretch(1)
+        summary_inner.addLayout(actions_row)
 
         self.summary_overview_label = QLabel("No transactions recorded yet.")
         self.summary_overview_label.setObjectName("SummaryCaption")
@@ -1407,19 +1403,6 @@ class BudgetTracker(QMainWindow):
         self.summary_scroll.setWidget(self.summary_frame)
         summary_layout.addWidget(self.summary_scroll, 1)
 
-        actions_row = QHBoxLayout()
-        actions_row.setSpacing(10)
-        self.export_btn = TweenButton("Export Monthly CSV")
-        self.chart_btn = TweenButton("Show Savings Chart")
-        self.expense_chart_btn = TweenButton("Show Expense Pie")
-        self.export_btn.setObjectName("SecondaryButton")
-        self.chart_btn.setObjectName("SecondaryButton")
-        self.expense_chart_btn.setObjectName("SecondaryButton")
-        actions_row.addWidget(self.export_btn)
-        actions_row.addWidget(self.chart_btn)
-        actions_row.addWidget(self.expense_chart_btn)
-        summary_layout.addLayout(actions_row)
-
         for card in (form_card, budget_card, ledger_card, self.summary_card):
             card.setMinimumWidth(340)
             card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
@@ -1472,7 +1455,16 @@ class BudgetTracker(QMainWindow):
         self.update_summary()
         
         # Add smooth entrance animations
-        QTimer.singleShot(100, self._animate_entrance)
+        if ENABLE_ENTRANCE_ANIMATION:
+            QTimer.singleShot(100, self._animate_entrance)
+
+    def _watch_focus(self, widget: QWidget | None) -> None:
+        if self._focus_glow is None or widget is None:
+            return
+        try:
+            self._focus_glow.watch(widget)
+        except Exception:
+            pass
 
     def _animate_entrance(self):
         """Animate card entrance with smooth slide-in + fade tweens."""
@@ -1594,7 +1586,7 @@ class BudgetTracker(QMainWindow):
         self.currency_amount_input = QLineEdit()
         self.currency_amount_input.setPlaceholderText("Amount in MYR")
         self.currency_amount_input.setValidator(QDoubleValidator(0.00, 1_000_000.0, 2))
-        self._focus_glow.watch(self.currency_amount_input)
+        self._watch_focus(self.currency_amount_input)
         layout.addWidget(self.currency_amount_input)
 
         self.currency_target_combo = QComboBox()
@@ -1602,8 +1594,8 @@ class BudgetTracker(QMainWindow):
         combo_edit = self.currency_target_combo.lineEdit()
         if combo_edit is not None:
             combo_edit.setPlaceholderText("Search currency (e.g., USD - US Dollar)")
-            self._focus_glow.watch(combo_edit)
-        self._focus_glow.watch(self.currency_target_combo)
+            self._watch_focus(combo_edit)
+        self._watch_focus(self.currency_target_combo)
         layout.addWidget(self.currency_target_combo)
 
         button_row = QHBoxLayout()
@@ -2665,9 +2657,9 @@ class BudgetTracker(QMainWindow):
         amount_edit.setValidator(QDoubleValidator(0.01, 1_000_000.0, 2))
         category_edit = QLineEdit(tx["category"])
         desc_edit = QLineEdit(tx["desc"])
-        self._focus_glow.watch(amount_edit)
-        self._focus_glow.watch(category_edit)
-        self._focus_glow.watch(desc_edit)
+        self._watch_focus(amount_edit)
+        self._watch_focus(category_edit)
+        self._watch_focus(desc_edit)
 
         form.addRow("Type", type_combo)
         form.addRow("Amount (RM)", amount_edit)
@@ -2800,7 +2792,7 @@ class BudgetTracker(QMainWindow):
         amount_edit = QLineEdit()
         amount_edit.setPlaceholderText("Amount to use (RM)")
         amount_edit.setValidator(QDoubleValidator(0.01, 1_000_000.0, 2))
-        self._focus_glow.watch(amount_edit)
+        self._watch_focus(amount_edit)
         form.addRow("Amount (RM)", amount_edit)
 
         savings_combo = QComboBox()
@@ -2824,7 +2816,7 @@ class BudgetTracker(QMainWindow):
 
         desc_edit = QLineEdit()
         desc_edit.setPlaceholderText("Description (optional)")
-        self._focus_glow.watch(desc_edit)
+        self._watch_focus(desc_edit)
         form.addRow("Description", desc_edit)
 
         layout.addLayout(form)
