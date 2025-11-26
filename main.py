@@ -263,6 +263,7 @@ class TweenButton(QPushButton):
     def __init__(self, text, parent=None):
         super().__init__(text, parent)
         self._anim: Optional[QAbstractAnimation] = None
+        self._pulse_anim: Optional[QSequentialAnimationGroup] = None
         self._shadow: Optional[QGraphicsDropShadowEffect] = None
         self._ensure_shadow()
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -314,10 +315,39 @@ class TweenButton(QPushButton):
     def mousePressEvent(self, e: QMouseEvent) -> None:
         event = e
         super().mousePressEvent(event)
+        self._play_pulse_animation()
     
     def mouseReleaseEvent(self, e: QMouseEvent) -> None:
         event = e
         super().mouseReleaseEvent(event)
+    
+    def _play_pulse_animation(self):
+        """Play a smooth pulse animation on button press."""
+        # Create opacity effect for pulse
+        effect = QGraphicsOpacityEffect()
+        self.setGraphicsEffect(effect)
+        
+        # Build sequential pulse: 1.0 -> 0.7 -> 1.0
+        seq = QSequentialAnimationGroup()
+        
+        pulse_out = QPropertyAnimation(effect, b"opacity")
+        pulse_out.setDuration(100)
+        pulse_out.setEasingCurve(QEasingCurve.OutQuad)
+        pulse_out.setStartValue(1.0)
+        pulse_out.setEndValue(0.7)
+        
+        pulse_in = QPropertyAnimation(effect, b"opacity")
+        pulse_in.setDuration(100)
+        pulse_in.setEasingCurve(QEasingCurve.OutQuad)
+        pulse_in.setStartValue(0.7)
+        pulse_in.setEndValue(1.0)
+        
+        seq.addAnimation(pulse_out)
+        seq.addAnimation(pulse_in)
+        
+        # Store to prevent garbage collection
+        self._pulse_anim = seq
+        seq.start()
 
 
 
@@ -1121,9 +1151,9 @@ class BudgetTracker(QMainWindow):
 
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(10)
-        self.income_btn = QPushButton("Add Income")
-        self.expense_btn = QPushButton("Add Expense")
-        self.savings_btn = QPushButton("Log Savings")
+        self.income_btn = TweenButton("Add Income")
+        self.expense_btn = TweenButton("Add Expense")
+        self.savings_btn = TweenButton("Log Savings")
         for btn, c1, c2 in (
             (self.income_btn, "#4CAF50", "#2E7D32"),
             (self.expense_btn, "#E91E63", "#880E4F"),
@@ -1275,9 +1305,9 @@ class BudgetTracker(QMainWindow):
         actions_row = QHBoxLayout()
         actions_row.setSpacing(10)
         actions_row.setContentsMargins(0, 0, 0, 0)
-        self.export_btn = QPushButton("Export Monthly CSV")
-        self.chart_btn = QPushButton("Show Savings Chart")
-        self.expense_chart_btn = QPushButton("Show Expense Pie")
+        self.export_btn = TweenButton("Export Monthly CSV")
+        self.chart_btn = TweenButton("Show Savings Chart")
+        self.expense_chart_btn = TweenButton("Show Expense Pie")
         self.export_btn.setObjectName("SecondaryButton")
         self.chart_btn.setObjectName("SecondaryButton")
         self.expense_chart_btn.setObjectName("SecondaryButton")
