@@ -322,32 +322,39 @@ class TweenButton(QPushButton):
         super().mouseReleaseEvent(event)
     
     def _play_pulse_animation(self):
-        """Play a smooth pulse animation on button press."""
-        # Create opacity effect for pulse
-        effect = QGraphicsOpacityEffect()
-        self.setGraphicsEffect(effect)
+        """Play a smooth pulse animation on button press via scale/size."""
+        # Animate the button size for visual feedback without replacing graphics effect
+        anim = QSequentialAnimationGroup()
         
-        # Build sequential pulse: 1.0 -> 0.7 -> 1.0
-        seq = QSequentialAnimationGroup()
+        # Scale down slightly
+        scale_down = QPropertyAnimation(self, b"geometry")
+        scale_down.setDuration(80)
+        scale_down.setEasingCurve(QEasingCurve.OutQuad)
+        current_geom = self.geometry()
+        center = current_geom.center()
+        # Shrink by 5%
+        shrunk = QRect(
+            int(center.x() - current_geom.width() * 0.475),
+            int(center.y() - current_geom.height() * 0.475),
+            int(current_geom.width() * 0.95),
+            int(current_geom.height() * 0.95)
+        )
+        scale_down.setStartValue(current_geom)
+        scale_down.setEndValue(shrunk)
         
-        pulse_out = QPropertyAnimation(effect, b"opacity")
-        pulse_out.setDuration(100)
-        pulse_out.setEasingCurve(QEasingCurve.OutQuad)
-        pulse_out.setStartValue(1.0)
-        pulse_out.setEndValue(0.7)
+        # Scale back to normal
+        scale_up = QPropertyAnimation(self, b"geometry")
+        scale_up.setDuration(80)
+        scale_up.setEasingCurve(QEasingCurve.OutQuad)
+        scale_up.setStartValue(shrunk)
+        scale_up.setEndValue(current_geom)
         
-        pulse_in = QPropertyAnimation(effect, b"opacity")
-        pulse_in.setDuration(100)
-        pulse_in.setEasingCurve(QEasingCurve.OutQuad)
-        pulse_in.setStartValue(0.7)
-        pulse_in.setEndValue(1.0)
-        
-        seq.addAnimation(pulse_out)
-        seq.addAnimation(pulse_in)
+        anim.addAnimation(scale_down)
+        anim.addAnimation(scale_up)
         
         # Store to prevent garbage collection
-        self._pulse_anim = seq
-        seq.start()
+        self._pulse_anim = anim
+        anim.start()
 
 
 
