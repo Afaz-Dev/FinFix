@@ -1866,7 +1866,13 @@ class BudgetTracker(QMainWindow):
         """Add shadow and smooth hover effects to any button."""
         shadow = QGraphicsDropShadowEffect()
         shadow.setBlurRadius(blur_radius)
-        shadow.setColor(QColor(0, 0, 0, 140))
+        
+        # Theme-aware shadow color
+        if self.theme_mode == "dark":
+            shadow.setColor(QColor(100, 150, 200, 120))  # Bluish-white for dark mode
+        else:
+            shadow.setColor(QColor(0, 0, 0, 140))  # Black for light mode
+        
         shadow.setOffset(0, 2)
         button.setGraphicsEffect(shadow)
         button.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -3182,6 +3188,7 @@ class BudgetTracker(QMainWindow):
                 "All savings have been used for the selected period.",
             )
             return
+
         categories = sorted(positive_totals.keys(), key=str.lower)
         values = [float(positive_totals[cat]) for cat in categories]
 
@@ -3397,238 +3404,5 @@ class BudgetTracker(QMainWindow):
         window.show()
         window.raise_()
         window.activateWindow()
-
-
-    def submit_default_transaction(self):
-        self.handle_add_tx(self.last_tx_type)
-
-    def handle_add_tx(self, ttype: str):
-        self.last_tx_type = ttype
-        self.add_tx(ttype)
-
-    def add_tx(self, ttype: str):
-        amt_text = self.amount_input.text().strip()
-        if not amt_text:
-            QMessageBox.warning(self, "Missing", "Amount is required.")
-            return
-        try:
-            amt = money(amt_text)
-            if amt <= 0:
-                raise ValueError
-        except Exception:
-            QMessageBox.critical(self, "Invalid", "Enter a valid amount, e.g. 12.50")
-            return
-
-        desc = self.desc_input.text().strip() or "No description"
-        raw_category = self.category_input.currentText().strip()
-        if not raw_category:
-            raw_category = "Savings" if ttype == "savings" else "General"
-        txid = next_tx_id()
-        tx_date = date.today().isoformat()
-
-        ensure_writable(LEDGER_CSV)
-        with LEDGER_CSV.open("a", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            writer.writerow([txid, tx_date, ttype, raw_category, f"{amt:.2f}", desc])
-        ensure_private_file(LEDGER_CSV)
-        self.undo_stack.append(("transaction", txid))
-        self.undo_stack = self.undo_stack[-20:]
-
-        self.load_ledger()
-        self.load_budgets()
-        self.refresh_category_options()
-        self.update_balance()
-        self.update_summary()
-        self.clear_inputs()
-
-        if ttype == "expense":
-            budget = self.budget_map.get(raw_category)
-            if budget:
-                spent = self.category_monthly_expense_total(raw_category)
-                if spent > budget:
-                    over = spent - budget
-                    QMessageBox.warning(
-                        self,
-                        "Budget exceeded",
-                        f"You have exceeded the {raw_category} budget by RM {over:.2f} this month.",
-                    )
-        self.toast(f"{ttype.capitalize()} added.")
-
-    def update_balance(self):
-        positive = self.balance >= 0
-        arrow = "^" if positive else "v"
-        fg = "#81C784" if positive else "#E57373"
-        if self.theme_mode == "dark":
-            bg = "#1E3A29" if positive else "#2A1515"
-        else:
-            bg = "#E8F5E9" if positive else "#FDE0DC"
-        self.balance_label.setText(f"{arrow} Net Position: RM {self.balance:.2f}")
-        
-        # Apply color immediately with pulse animation
-        self.balance_label.setStyleSheet(f"color: {fg}; background-color: {bg}; padding: 8px; border-radius: 6px;")
-        self._animate_label_change(self.balance_label)
-    
-    def _animate_label_change(self, label):
-        """Smooth pulse animation on balance update."""
-        effect = QGraphicsOpacityEffect()
-        label.setGraphicsEffect(effect)
-        
-        # Quick visual pulse: 1.0 -> 0.6 -> 1.0
-        seq = QSequentialAnimationGroup()
-        
-        pulse1 = QPropertyAnimation(effect, b"opacity")
-        pulse1.setDuration(150)
-        pulse1.setEasingCurve(QEasingCurve.OutQuad)
-        pulse1.setStartValue(1.0)
-        pulse1.setEndValue(0.6)
-        
-        pulse2 = QPropertyAnimation(effect, b"opacity")
-        pulse2.setDuration(150)
-        pulse2.setEasingCurve(QEasingCurve.OutQuad)
-        pulse2.setStartValue(0.6)
-        pulse2.setEndValue(1.0)
-        
-        seq.addAnimation(pulse1)
-        seq.addAnimation(pulse2)
-        
-        # Store animation to prevent garbage collection
-        self._balance_anim = seq
-        seq.start()
-    
-    def _animate_new_item(self, item: QListWidgetItem):
-        """Smooth highlight animation for newly added list items."""
-        # Animate background color from highlight to normal
-        import random
-        anim_id = f"_list_anim_{random.randint(0, 999999)}"
-        
-        def animate_highlight():
-            colors = [
-                "rgba(99, 102, 241, 60)",   # Start: indigo highlight
-                "rgba(99, 102, 241, 40)",
-                "rgba(99, 102, 241, 20)",
-                "rgba(99, 102, 241, 0)"     # End: transparent
-            ]
-            
-            for i, color in enumerate(colors):
-                QTimer.singleShot(i * 75, lambda c=color: item.setBackground(QColor(c)))
-        
-        animate_highlight()
-        
-        # Store reference to prevent garbage collection
-        setattr(self, anim_id, item)
-    
-    def _animate_table_row(self, table, row, delay_ms):
-        """Highlight table row with staggered indigo tint."""
-        def animate_row():
-            for col in range(table.columnCount()):
-                item = table.item(row, col)
-                if item:
-                    item.setBackground(QColor(99, 102, 241, 30))
-                    QTimer.singleShot(200, lambda: item.setBackground(QColor()))
-        QTimer.singleShot(delay_ms, animate_row)
-    
-    def undo_last_transaction(self):
-        if not self.undo_stack:
-            self.toast("Nothing to undo.", 3000)
-            return
-        action, txid = self.undo_stack.pop()
-        if action != "transaction":
-            self.toast("Nothing to undo.", 3000)
-            return
-        if not self._remove_transaction_by_id(txid):
-            self.toast("Unable to undo last transaction.", 4000)
-            return
-        self.load_ledger()
-        self.load_budgets()
-        self.refresh_category_options()
-        self.update_balance()
-        self.update_summary()
-        self.toast("Last transaction undone.", 4000)
-
-    def clear_inputs(self):
-        self.amount_input.clear()
-        self.desc_input.clear()
-        line_edit = self.category_input.lineEdit()
-        if line_edit is not None:
-            line_edit.clear()
-        self.category_input.setCurrentIndex(-1)
-        self.amount_input.setFocus()
-
-    def toggle_theme(self):
-        self.theme_mode = "light" if self.theme_mode == "dark" else "dark"
-        self.apply_theme()
-        self.load_budgets()
-        self.update_balance()
-        self.update_summary()
-
-    def apply_theme(self):
-        if self.theme_mode == "dark":
-            stylesheet = DARK_STYLESHEET
-        else:
-            stylesheet = LIGHT_STYLESHEET
-        self.setStyleSheet(stylesheet)
-        if self.converter_window is not None:
-            self.converter_window.setStyleSheet(stylesheet)
-        for window in list(self.chart_windows.values()):
-            if window is None:
-                continue
-            window.setStyleSheet(stylesheet)
-            window.apply_theme(self.theme_mode)
-            self._apply_titlebar_palette(window)
-        self.update_titlebar_theme()
-        self._refresh_card_shadows()
-
-    def _apply_titlebar_palette(self, widget: QWidget | None) -> None:
-        if os.name != "nt" or widget is None:
-            return
-        try:
-            hwnd = int(widget.winId())
-            if hwnd == 0:
-                return
-            dwmapi = ctypes.windll.dwmapi
-            dark_enabled = ctypes.c_int(1 if self.theme_mode == "dark" else 0)
-            # Apply immersive dark mode flag for compatibility across Windows versions
-            for attr in (19, 20):
-                dwmapi.DwmSetWindowAttribute(hwnd, attr, ctypes.byref(dark_enabled), ctypes.sizeof(dark_enabled))
-            caption_color = ctypes.c_uint(0x00281D1D if self.theme_mode == "dark" else 0x00FFFFFF)
-            text_color = ctypes.c_uint(0x00E0E0E0 if self.theme_mode == "dark" else 0x00212121)
-            dwmapi.DwmSetWindowAttribute(hwnd, 35, ctypes.byref(caption_color), ctypes.sizeof(caption_color))
-            dwmapi.DwmSetWindowAttribute(hwnd, 36, ctypes.byref(text_color), ctypes.sizeof(text_color))
-        except Exception:
-            pass
-
-    def update_titlebar_theme(self):
-        self._apply_titlebar_palette(self)
-
-
-
-
-
-
-
-
-def install_ctrl_c_quit(app: QApplication) -> None:
-    """Allow Ctrl+C in the console to close the app without a traceback."""
-    try:
-        signal.signal(signal.SIGINT, lambda *args: app.quit())
-    except Exception:
-        # If the platform does not support SIGINT (very rare), ignore gracefully.
-        pass
-
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    install_ctrl_c_quit(app)
-    # Set application-wide icon (affects taskbar/dock on many systems)
-    try:
-        app.setWindowIcon(get_app_icon())
-    except Exception:
-        pass
-    win = BudgetTracker()
-    win.show()
-    try:
-        sys.exit(app.exec_())
-    except KeyboardInterrupt:
-        sys.exit(0)
 
 
