@@ -1204,6 +1204,7 @@ class BudgetTracker(QMainWindow):
 
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(10)
+<<<<<<< HEAD
         self.income_btn = TweenButton("Add Income")
         self.expense_btn = TweenButton("Add Expense")
         self.savings_btn = TweenButton("Log Savings")
@@ -1234,6 +1235,11 @@ class BudgetTracker(QMainWindow):
                 """
             )
             self.enhance_button_with_shadow(btn, blur_radius=18)
+=======
+        self.income_btn = self.createGradientButton("Add Income", "#4CAF50", "#2E7D32")
+        self.expense_btn = self.createGradientButton("Add Expense", "#E91E63", "#880E4F")
+        self.savings_btn = self.createGradientButton("Log Savings", "#03A9F4", "#01579B")
+>>>>>>> parent of 6865d8d (made some changes towards the cards and made them immovable (to reduce bugs))
         btn_layout.addWidget(self.income_btn)
         btn_layout.addWidget(self.expense_btn)
         btn_layout.addWidget(self.savings_btn)
@@ -1355,6 +1361,7 @@ class BudgetTracker(QMainWindow):
         summary_inner.setContentsMargins(18, 16, 18, 16)
         summary_inner.setSpacing(12)
 
+<<<<<<< HEAD
         actions_row = QHBoxLayout()
         actions_row.setSpacing(10)
         actions_row.setContentsMargins(0, 0, 0, 0)
@@ -1370,6 +1377,8 @@ class BudgetTracker(QMainWindow):
         actions_row.addStretch(1)
         summary_inner.addLayout(actions_row)
 
+=======
+>>>>>>> parent of 6865d8d (made some changes towards the cards and made them immovable (to reduce bugs))
         self.summary_overview_label = QLabel("No transactions recorded yet.")
         self.summary_overview_label.setObjectName("SummaryCaption")
         self.summary_overview_label.setWordWrap(True)
