@@ -89,17 +89,6 @@ except Exception:
 # App logo helpers (generated or assets/logo.png if available)
 from app_logo import get_app_icon, get_logo_pixmap
 
-# ============================================================================
-# ANIMATION SYSTEM - Smooth Tweening Animations
-# ============================================================================
-# TweenButton:       Smooth position + shadow blur tweening on hover/press
-# TweenListWidget:   Smooth scale tweening on list item hover
-# Card Entrance:     Smooth slide-in (left to right) + fade tween on startup
-# Input Focus:       CSS-based transitions for border & shadow
-# 
-# All animations use OutCubic easing for natural motion
-# ============================================================================
-
 DATA_DIR = Path.home() / ".finfix_data"
 LEGACY_DATA_DIR = Path("data")
 LEDGER_CSV = DATA_DIR / "transactions.csv"
