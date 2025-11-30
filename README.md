@@ -13,7 +13,44 @@ FinFix is a lightweight, offline, command-line Python application designed to he
 - Maintain full privacy through local, offline data storage.
 - Allow simple export of financial summaries for academic or personal use.
 
+## Core Features# FINFIX – PERSONAL FINANCE / BUDGET TRACKER
+
+## Description
+
+FinFix is a lightweight, offline, Python-based application designed to help students monitor and manage personal finances. It provides tools to record income, expenses, and savings, set monthly category budgets, and generate clear, auditable financial summaries. The system prioritizes privacy, transparency, and compliance with academic requirements. The program features a modern GUI built using PyQt5, offering an intuitive and interactive user experience.
+
+## Program Objectives
+- Enable students to track income, expenses, and savings with detailed transaction records.
+- Support monthly budgeting through category-based limits and progress tracking.
+- Provide visual insights into financial behavior with charts and summaries.
+- Reduce manual recording errors commonly found in spreadsheets.
+- Maintain full privacy through local, offline data storage.
+- Allow exporting of financial summaries in CSV, PNG, and PDF formats for academic or personal use.
+
 ## Core Features
+- **Modern GUI**: Built with PyQt5, featuring a clean and interactive interface.
+- **Transaction Management**: Add, edit, duplicate, or delete income, expenses, and savings transactions.
+- **Budget Tracking**: Set monthly budgets per category and monitor spending progress.
+- **Visual Insights**: Generate savings charts, expense pie charts, and daily spending sparklines.
+- **Currency Conversion**: Convert MYR to other currencies using live exchange rates.
+- **Undo Functionality**: Undo the last transaction for error correction.
+- **Data Validation**: Automatic validation of inputs to ensure data integrity.
+- **Autosave**: All changes are saved automatically to local CSV files.
+- **Export Options**: Export monthly summaries as CSV, PNG, or PDF files.
+- **Dark/Light Mode**: Toggle between dark and light themes for better usability.
+- **Offline Storage**: All data is stored locally, ensuring privacy and security.
+
+## Data Files Used
+1. **transactions.csv** – Stores all income, expense, and savings entries (transaction ID, date, type, category, amount, description).
+2. **budgets.csv** – Stores monthly budget limits per category.
+3. **rates.json** – Stores cached currency exchange rates for offline use.
+
+## How to Use the Program
+
+### 1. Run the application
+Ensure you have Python 3.10+ installed. Run the program using:
+```bash
+python [main.py](http://_vscodecontentref_/0)
 - Runs on standard Python 3.10+
 - No external libraries required
 - Simple and clean CLI menu system
