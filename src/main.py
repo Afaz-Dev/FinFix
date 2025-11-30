@@ -11,6 +11,7 @@ from PyQt5.QtGui import (
     QFont,
     QDoubleValidator,
     QHelpEvent,
+    QIcon,
     QKeySequence,
     QPainter,
     QDrag,
@@ -245,6 +246,17 @@ QPushButton#SecondaryButton:hover { background-color: #E4E4E4; border: 1px solid
 QLabel#InfoText { color: #5F6368; font-size: 11px; background-color: transparent; }
 """.strip()
 
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        # Standard path for development environment
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
+
 
 class TweenButton(QPushButton):
     """Button with smooth scale/position tweening animations on hover/press."""
@@ -257,6 +269,9 @@ class TweenButton(QPushButton):
         self._ensure_shadow()
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self._orig_geometry: Optional[QRect] = None
+
+        icon_path = resource_path("assets/icon.ico")
+        self.setWindowIcon(QIcon(icon_path))
 
     def _ensure_shadow(self) -> QGraphicsDropShadowEffect:
         if self._shadow is None or _is_deleted(self._shadow):
