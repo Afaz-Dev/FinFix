@@ -119,7 +119,7 @@ python main.py
 
 ## Team Members 👥
 
-* Ahmad Firdaus Bin Ahmad Zaki – 104408954
+* Ahmad Firdaus Bin Ahmad Zaki (Leader) – 104408954
 * Adem Jian Kai Ngieng – 104410878
 * You Han Liu – 105805954
 * Muhammad – 104402477
