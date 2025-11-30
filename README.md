@@ -65,7 +65,7 @@ Ensure you have **Python 3.10+** installed. Run the program using:
 python main.py
 ```
 
-or download and run the FinFix.exe app on the releases (can be found on Github and the releases folder)
+or run the FinFix.exe app on the releases (can be found on Github and the releases folder)
 
 ### 2. Main Features
 * **Log Transactions**: Add income, expenses, or savings with categories and descriptions.
