@@ -3,6 +3,8 @@
 ## Description
 FinFix is a lightweight, offline, Python-based application designed to help students monitor and manage personal finances. It provides tools to record income, expenses, and savings, set monthly category budgets, and generate clear, auditable financial summaries. The system prioritizes privacy, transparency, and compliance with academic requirements. The program features a modern GUI built using **PyQt5**, offering an intuitive and interactive user experience.
 
+Github Link : https://github.com/Afaz-Dev/FinFix
+
 ---
 
 ## Program Objectives
@@ -62,6 +64,8 @@ Ensure you have **Python 3.10+** installed. Run the program using:
 ```bash
 python main.py
 ```
+
+or download and run FinFix.exe file
 
 ### 2. Main Features
 * **Log Transactions**: Add income, expenses, or savings with categories and descriptions.
